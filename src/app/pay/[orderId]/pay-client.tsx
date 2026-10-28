@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { rupees } from "@/lib/format";
 import type { OrderView } from "@/lib/razorpay";
+import { Icon } from "../../ui/icons";
 
 type CheckoutSuccess = {
   razorpay_payment_id: string;
@@ -73,7 +74,7 @@ export function PayClient({ orderId }: { orderId: string }) {
         currency: order.currency,
         name: order.merchant,
         description: "Bill payment via Snap-to-Pay",
-        theme: { color: "#059669" },
+        theme: { color: "#0e7a5c" },
         handler: (success: CheckoutSuccess) =>
           confirmPaid(success)
             .catch((e: Error) => setError(e.message))
@@ -87,47 +88,84 @@ export function PayClient({ orderId }: { orderId: string }) {
   }
 
   if (error && !order) {
-    return <p className="rounded-lg bg-red-50 p-4 text-sm text-red-700 dark:bg-red-950 dark:text-red-200">{error}</p>;
+    return (
+      <div className="rounded-3xl border border-line bg-surface p-8 text-center">
+        <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-danger-soft text-danger">
+          <Icon name="alert" className="size-5" />
+        </span>
+        <p className="mt-3 font-medium">{error}</p>
+        <p className="mt-1 text-sm text-muted">Check the link with the shop that sent it.</p>
+      </div>
+    );
   }
-  if (!order) return <p className="text-sm opacity-60">Loading bill…</p>;
+  if (!order) return <PayPageSkeleton />;
+
+  const paid = order.status === "paid";
 
   return (
-    <section className="rounded-2xl border border-black/10 p-6 dark:border-white/15">
-      <p className="text-xs uppercase tracking-wide opacity-60">Bill from</p>
-      <h1 className="mt-1 text-2xl font-bold">{order.merchant}</h1>
-
-      <ul className="mt-5 space-y-2 text-sm">
-        {order.lines.map((line, i) => (
-          <li key={i} className="border-b border-black/5 pb-2 dark:border-white/10">
-            {line}
-          </li>
-        ))}
-      </ul>
-
-      <div className="mt-5 flex items-baseline justify-between">
-        <span className="font-medium">Total</span>
-        <span className="text-2xl font-bold">{rupees(order.amount)}</span>
+    <div className="rise">
+      <div className="text-center">
+        <span className="mx-auto grid size-14 place-items-center rounded-2xl bg-brand font-display text-2xl font-bold text-on-brand">
+          {order.merchant.trim().charAt(0).toUpperCase()}
+        </span>
+        <p className="mt-3 text-sm text-muted">Bill from</p>
+        <h1 className="font-display text-3xl font-bold tracking-tight">{order.merchant}</h1>
       </div>
 
-      {order.status === "paid" ? (
-        <div className="mt-6 rounded-xl bg-emerald-50 p-4 text-center dark:bg-emerald-950">
-          <p className="text-lg font-bold text-emerald-700 dark:text-emerald-300">Paid ✅</p>
-          {order.paymentId && <p className="mt-1 font-mono text-xs opacity-70">{order.paymentId}</p>}
+      <article className="receipt-edge mt-6 bg-paper px-6 pt-6 shadow-[0_1px_0_var(--line),0_12px_32px_-12px_rgb(0_0_0/0.18)]">
+        <ul className="space-y-2.5 text-sm">
+          {order.lines.map((line, i) => {
+            const cut = line.lastIndexOf(" — ");
+            return (
+              <li key={i} className="flex justify-between gap-4">
+                <span>{cut === -1 ? line : line.slice(0, cut)}</span>
+                {cut !== -1 && <span className="shrink-0 font-mono">{line.slice(cut + 3)}</span>}
+              </li>
+            );
+          })}
+        </ul>
+        <div className="mt-5 flex items-end justify-between border-t-2 border-ink pt-4">
+          <span className="text-sm font-semibold tracking-wide uppercase">Total</span>
+          <span className="font-display text-4xl font-bold tracking-tight">{rupees(order.amount)}</span>
+        </div>
+      </article>
+
+      {paid ? (
+        <div className="mt-6 rounded-2xl border border-brand/30 bg-brand-soft p-6 text-center">
+          <span className="pop mx-auto grid size-14 place-items-center rounded-full bg-brand text-on-brand">
+            <Icon name="check" className="size-7" />
+          </span>
+          <p className="mt-3 font-display text-2xl font-bold text-brand">Paid. Thank you!</p>
+          {order.paymentId && <p className="mt-1 font-mono text-xs text-muted">{order.paymentId}</p>}
         </div>
       ) : (
         <button
           onClick={pay}
           disabled={busy}
-          className="mt-6 w-full rounded-lg bg-emerald-600 px-5 py-3 text-base font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+          className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-brand px-5 py-4 text-lg font-semibold text-on-brand shadow-sm transition hover:bg-brand-strong disabled:opacity-50"
         >
           {busy ? "Opening payment…" : `Pay ${rupees(order.amount)}`}
+          {!busy && <Icon name="arrow" className="size-5" />}
         </button>
       )}
 
-      {error && <p className="mt-3 text-sm text-red-600 dark:text-red-300">{error}</p>}
-      <p className="mt-6 text-center text-xs opacity-50">
-        Test mode · secured by Razorpay · no real money moves
+      {error && <p className="mt-3 rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
+
+      <p className="mt-6 flex items-center justify-center gap-1.5 text-xs text-muted">
+        <Icon name="shield" className="size-3.5" />
+        Secured by Razorpay · UPI, cards, netbanking
       </p>
-    </section>
+    </div>
+  );
+}
+
+function PayPageSkeleton() {
+  return (
+    <div aria-label="Loading bill">
+      <div className="skeleton mx-auto size-14 rounded-2xl" />
+      <div className="skeleton mx-auto mt-4 h-7 w-1/2 rounded" />
+      <div className="skeleton mt-6 h-56 w-full rounded-xl" />
+      <div className="skeleton mt-6 h-14 w-full rounded-xl" />
+    </div>
   );
 }

@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type DragEvent } from "react";
 import type { ParsedBill } from "@/lib/bill";
-import { rupees } from "@/lib/format";
 import { SAMPLES, type Sample } from "@/lib/samples";
-import { CollectPayment } from "./collect-payment";
+import { BillEditor } from "./bill-editor";
+import { Logo, TestModeBadge } from "./ui/brand";
+import { HowItWorks } from "./ui/how-it-works";
+import { Icon, type IconName } from "./ui/icons";
 
 // Minimal typing for the browser Speech Recognition API (Chrome/Edge expose it as webkitSpeechRecognition).
 type Recognition = {
@@ -19,28 +21,61 @@ type Recognition = {
 };
 type RecognitionCtor = new () => Recognition;
 
+type Mode = Sample["kind"];
+
+const MODES: { id: Mode; label: string; icon: IconName }[] = [
+  { id: "photo", label: "Photo", icon: "camera" },
+  { id: "text", label: "Type", icon: "message" },
+  { id: "voice", label: "Speak", icon: "mic" },
+];
+
+const READING_STEPS = ["Reading the bill…", "Translating item names…", "Checking the maths…", "Almost there…"];
+
+const REPO_URL = "https://github.com/Ramya-Shah/snap-to-pay";
+
 export default function Home() {
+  const [mode, setMode] = useState<Mode>("photo");
   const [text, setText] = useState("");
   const [image, setImage] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [readingStep, setReadingStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [bill, setBill] = useState<ParsedBill | null>(null);
-  // Bumped for every new bill so its payment box starts fresh.
+  // Bumped for every new bill so the editor and its payment box start fresh.
   const [billRun, setBillRun] = useState(0);
-  const [listening, setListening] = useState(false);
   const [fromSample, setFromSample] = useState(false);
+  const [listening, setListening] = useState(false);
   const recognition = useRef<Recognition | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const resultPanel = useRef<HTMLElement>(null);
 
   // Free the preview's blob URL when it is replaced or the page unmounts.
   useEffect(() => () => {
     if (preview) URL.revokeObjectURL(preview);
   }, [preview]);
 
+  // Free-tier Gemini can take a while; show what it is doing.
+  useEffect(() => {
+    if (!loading) return;
+    const timer = setInterval(
+      () => setReadingStep((s) => Math.min(s + 1, READING_STEPS.length - 1)),
+      2500,
+    );
+    return () => clearInterval(timer);
+  }, [loading]);
+
   function pickImage(file: File | null) {
     setImage(file);
     setPreview(file ? URL.createObjectURL(file) : null);
+  }
+
+  function onDrop(e: DragEvent) {
+    e.preventDefault();
+    setDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file?.type.startsWith("image/")) pickImage(file);
   }
 
   function toggleVoice() {
@@ -57,6 +92,7 @@ export default function Home() {
       setError("Voice input needs Chrome or Edge. You can type the order instead.");
       return;
     }
+    setError(null);
     const r = new SpeechCtor();
     r.lang = "en-IN";
     r.interimResults = false;
@@ -74,13 +110,25 @@ export default function Home() {
     setListening(true);
   }
 
-  // Show the saved answer at once, and load the sample's input so "Itemize bill" can read it live.
+  function showBill(next: ParsedBill, sample: boolean) {
+    setBill(next);
+    setFromSample(sample);
+    setBillRun((n) => n + 1);
+  }
+
+  // On phones the bill sits below the inputs, so bring it into view.
+  function revealResult() {
+    if (window.matchMedia("(min-width: 1024px)").matches) return;
+    requestAnimationFrame(() => resultPanel.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  }
+
+  // Show the saved answer at once, and load the sample's input so "Itemize" can read it live.
   async function trySample(sample: Sample) {
     reset();
+    setMode(sample.kind);
     setText(sample.text ?? "");
-    setBill(sample.bill);
-    setBillRun((n) => n + 1);
-    setFromSample(true);
+    showBill(sample.bill, true);
+    revealResult();
     if (sample.image) {
       const blob = await (await fetch(sample.image)).blob();
       pickImage(new File([blob], sample.image.split("/").pop()!, { type: blob.type }));
@@ -89,18 +137,18 @@ export default function Home() {
 
   async function itemize() {
     setLoading(true);
+    setReadingStep(0);
     setError(null);
     setBill(null);
-    setFromSample(false);
+    revealResult();
     const form = new FormData();
-    if (text.trim()) form.append("text", text.trim());
-    if (image) form.append("image", image);
+    if (mode === "photo" && image) form.append("image", image);
+    if (mode !== "photo" && text.trim()) form.append("text", text.trim());
     try {
       const res = await fetch("/api/parse-bill", { method: "POST", body: form });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Something went wrong.");
-      setBill(data.bill);
-      setBillRun((n) => n + 1);
+      showBill(data.bill, false);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong.");
     } finally {
@@ -117,162 +165,251 @@ export default function Home() {
     if (fileInput.current) fileInput.current.value = "";
   }
 
-  const canSubmit = !loading && (text.trim().length > 0 || image !== null);
+  const canSubmit = !loading && (mode === "photo" ? image !== null : text.trim().length > 0);
 
   return (
-    <main className="mx-auto w-full max-w-2xl px-4 py-10">
-      <header className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tight">Snap-to-Pay</h1>
-        <p className="mt-2 text-sm opacity-70">
-          Photo of a bill, a WhatsApp order, or a voice note → itemized bill, ready to collect
-          payment.
+    <div className="mx-auto w-full max-w-6xl px-4 sm:px-6">
+      <nav className="flex items-center justify-between gap-3 py-5">
+        <Logo />
+        <TestModeBadge />
+      </nav>
+
+      <header className="max-w-3xl pt-8 pb-10 sm:pt-12">
+        <p className="text-sm font-semibold tracking-wide text-brand uppercase">AI bill reader × Razorpay</p>
+        <h1 className="mt-3 font-display text-5xl leading-[0.95] font-extrabold tracking-tight sm:text-7xl">
+          Snap a bill.
+          <br />
+          <span className="text-brand">Get paid.</span>
+        </h1>
+        <p className="mt-5 max-w-xl text-lg text-muted">
+          A handwritten bill, a WhatsApp order or a voice note becomes an itemized bill in seconds, then
+          a QR code your customer pays through Razorpay.
         </p>
       </header>
 
-      <div className="mb-4">
-        <p className="text-xs font-medium uppercase tracking-wide opacity-60">Try a sample</p>
-        <div className="mt-2 flex flex-wrap gap-2">
-          {SAMPLES.map((s) => (
-            <button
-              key={s.id}
-              onClick={() => trySample(s)}
-              disabled={loading}
-              className="rounded-full border border-black/15 px-3 py-1.5 text-sm hover:border-blue-600 disabled:opacity-40 dark:border-white/20"
-            >
-              {s.label}
-            </button>
-          ))}
-        </div>
-      </div>
+      <main className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] lg:items-start">
+        <section className="rounded-3xl border border-line bg-surface p-5 shadow-sm sm:p-6">
+          <StepLabel n={1}>Add the bill</StepLabel>
 
-      <section className="space-y-4 rounded-2xl border border-black/10 p-5 dark:border-white/15">
-        <label className="block">
-          <span className="text-sm font-medium">Bill photo</span>
-          <input
-            ref={fileInput}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            onChange={(e) => pickImage(e.target.files?.[0] ?? null)}
-            className="mt-2 block w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-blue-600 file:px-4 file:py-2 file:text-white hover:file:bg-blue-700"
-          />
-        </label>
-        {preview && (
-          // eslint-disable-next-line @next/next/no-img-element -- local blob preview
-          <img src={preview} alt="Bill preview" className="max-h-64 rounded-lg border border-black/10" />
-        )}
+          <div role="tablist" aria-label="Input type" className="mt-4 grid grid-cols-3 gap-1 rounded-xl bg-surface-2 p-1">
+            {MODES.map((m) => (
+              <button
+                key={m.id}
+                role="tab"
+                aria-selected={mode === m.id}
+                onClick={() => setMode(m.id)}
+                className={`flex items-center justify-center gap-2 rounded-lg py-2 text-sm font-medium transition ${
+                  mode === m.id ? "bg-surface text-ink shadow-sm" : "text-muted hover:text-ink"
+                }`}
+              >
+                <Icon name={m.icon} />
+                {m.label}
+              </button>
+            ))}
+          </div>
 
-        <label className="block">
-          <span className="text-sm font-medium">…or type / speak the order</span>
-          <textarea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            rows={4}
-            placeholder="2 kg tomatoes 80, 1 paneer 120, delivery 40"
-            className="mt-2 w-full rounded-lg border border-black/15 bg-transparent p-3 text-sm outline-none focus:border-blue-600 dark:border-white/20"
-          />
-        </label>
+          <div className="mt-4">
+            {mode === "photo" && (
+              <label
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDragging(true);
+                }}
+                onDragLeave={() => setDragging(false)}
+                onDrop={onDrop}
+                className={`group relative flex min-h-56 cursor-pointer flex-col items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed transition ${
+                  dragging ? "border-brand bg-brand-soft" : "border-line hover:border-brand/60 hover:bg-surface-2"
+                }`}
+              >
+                <input
+                  ref={fileInput}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={(e) => pickImage(e.target.files?.[0] ?? null)}
+                  className="sr-only"
+                />
+                {preview ? (
+                  <>
+                    {/* eslint-disable-next-line @next/next/no-img-element -- local blob preview */}
+                    <img src={preview} alt="Bill preview" className="max-h-72 w-full object-contain p-3" />
+                    <span className="absolute right-3 bottom-3 rounded-lg bg-ink/80 px-2.5 py-1 text-xs font-medium text-bg">
+                      Change photo
+                    </span>
+                  </>
+                ) : (
+                  <div className="px-6 text-center">
+                    <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-brand-soft text-brand">
+                      <Icon name="upload" className="size-5" />
+                    </span>
+                    <p className="mt-3 font-medium">Drop a bill photo, or tap to take one</p>
+                    <p className="mt-1 text-xs text-muted">JPG, PNG, WebP or HEIC · up to 8 MB</p>
+                  </div>
+                )}
+              </label>
+            )}
 
-        <div className="flex flex-wrap gap-3">
+            {mode === "voice" && (
+              <div className="flex flex-col items-center rounded-2xl bg-surface-2 py-6">
+                <button
+                  onClick={toggleVoice}
+                  aria-label={listening ? "Stop listening" : "Start speaking"}
+                  className={`relative grid size-20 place-items-center rounded-full transition ${
+                    listening ? "bg-danger text-white" : "bg-brand text-on-brand hover:bg-brand-strong"
+                  }`}
+                >
+                  {listening && <span className="absolute inset-0 animate-ping rounded-full bg-danger/40" />}
+                  <Icon name={listening ? "x" : "mic"} className="relative size-8" />
+                </button>
+                <p className="mt-3 text-sm font-medium">{listening ? "Listening… tap to stop" : "Tap and say the order"}</p>
+                <p className="mt-0.5 text-xs text-muted">e.g. “two kg tomatoes eighty, one paneer one twenty”</p>
+              </div>
+            )}
+
+            {mode !== "photo" && (
+              <textarea
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                rows={mode === "voice" ? 3 : 6}
+                placeholder={
+                  mode === "voice"
+                    ? "What you say appears here. You can fix it before itemizing."
+                    : "Paste a WhatsApp order, e.g.\n2 kg tomatoes 80, 1 paneer 120, delivery 40"
+                }
+                className={`w-full resize-none rounded-2xl border border-line bg-surface p-4 text-sm outline-none placeholder:text-muted/70 focus:border-brand ${
+                  mode === "voice" ? "mt-3" : ""
+                }`}
+              />
+            )}
+          </div>
+
+          {error && (
+            <p role="alert" className="mt-4 flex gap-2 rounded-xl bg-danger-soft px-3 py-2.5 text-sm text-danger">
+              <Icon name="alert" className="mt-0.5 size-4 shrink-0" />
+              {error}
+            </p>
+          )}
+
           <button
             onClick={itemize}
             disabled={!canSubmit}
-            className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
+            className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-ink px-5 py-3.5 font-semibold text-bg transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-30"
           >
-            {loading ? "Reading bill… (up to ~20 s)" : "Itemize bill"}
+            <Icon name="sparkles" />
+            {loading ? READING_STEPS[readingStep] : "Itemize with AI"}
           </button>
-          <button
-            onClick={toggleVoice}
-            className={`rounded-lg border px-4 py-2.5 text-sm font-medium ${
-              listening ? "border-red-500 text-red-600" : "border-black/15 dark:border-white/20"
-            }`}
-          >
-            {listening ? "■ Stop" : "🎤 Speak order"}
-          </button>
-          <button onClick={reset} className="px-2 text-sm opacity-60 hover:opacity-100">
-            Clear
-          </button>
-        </div>
-      </section>
 
-      {error && (
-        <p className="mt-6 rounded-lg bg-red-50 p-4 text-sm text-red-700 dark:bg-red-950 dark:text-red-200">
-          {error}
-        </p>
-      )}
+          <div className="mt-7">
+            <p className="text-xs font-semibold tracking-wide text-muted uppercase">Or try a sample · instant</p>
+            <ul className="mt-3 grid gap-2">
+              {SAMPLES.map((s) => (
+                <li key={s.id}>
+                  <button
+                    onClick={() => trySample(s)}
+                    disabled={loading}
+                    className="group flex w-full items-center gap-3 rounded-xl border border-line p-3 text-left transition hover:border-brand/50 hover:bg-surface-2 disabled:opacity-40"
+                  >
+                    <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-surface-2 text-muted group-hover:bg-brand-soft group-hover:text-brand">
+                      <Icon name={MODES.find((m) => m.id === s.kind)!.icon} />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-medium">{s.label}</span>
+                      <span className="block truncate text-xs text-muted">{s.hint}</span>
+                    </span>
+                    <Icon name="arrow" className="size-4 text-muted transition group-hover:translate-x-0.5 group-hover:text-brand" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
 
-      {bill && <BillView key={billRun} bill={bill} fromSample={fromSample} />}
-    </main>
+        <section ref={resultPanel} className="scroll-mt-4 lg:sticky lg:top-6" aria-live="polite">
+          <div className="flex items-center justify-between">
+            <StepLabel n={2}>Check it, then collect</StepLabel>
+            {bill && (
+              <button onClick={reset} className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-ink">
+                <Icon name="refresh" className="size-3.5" />
+                New bill
+              </button>
+            )}
+          </div>
+          <div className="mt-4">
+            {loading ? (
+              <ReadingReceipt step={READING_STEPS[readingStep]} />
+            ) : bill ? (
+              <BillEditor key={billRun} initial={bill} fromSample={fromSample} />
+            ) : (
+              <EmptyReceipt />
+            )}
+          </div>
+        </section>
+      </main>
+
+      <HowItWorks />
+
+      <footer className="mt-16 flex flex-col gap-2 border-t border-line py-8 text-sm text-muted sm:flex-row sm:items-center sm:justify-between">
+        <p>Snap-to-Pay · a demo in Razorpay test mode. No real money moves.</p>
+        <a href={REPO_URL} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 hover:text-ink">
+          Source on GitHub
+          <Icon name="external" className="size-3.5" />
+        </a>
+      </footer>
+    </div>
   );
 }
 
-function BillView({ bill, fromSample }: { bill: ParsedBill; fromSample: boolean }) {
+function StepLabel({ n, children }: { n: number; children: string }) {
   return (
-    <section className="mt-8 rounded-2xl border border-black/10 p-5 dark:border-white/15">
-      <h2 className="text-lg font-semibold">{bill.merchantName ?? "Itemized bill"}</h2>
-      {fromSample && (
-        <p className="mt-1 text-xs opacity-60">
-          Saved Gemini answer: instant, uses no AI quota. Press Itemize bill to read it live.
-        </p>
-      )}
+    <h2 className="flex items-center gap-2.5 font-display text-lg font-bold tracking-tight">
+      <span className="grid size-7 place-items-center rounded-full bg-ink font-sans text-xs font-bold text-bg">{n}</span>
+      {children}
+    </h2>
+  );
+}
 
-      <table className="mt-4 w-full text-sm">
-        <thead className="text-left opacity-60">
-          <tr>
-            <th className="pb-2 font-medium">Item</th>
-            <th className="pb-2 text-right font-medium">Qty</th>
-            <th className="pb-2 text-right font-medium">Rate</th>
-            <th className="pb-2 text-right font-medium">Amount</th>
-          </tr>
-        </thead>
-        <tbody>
-          {bill.items.map((item, i) => (
-            <tr key={i} className="border-t border-black/5 dark:border-white/10">
-              <td className="py-2">{item.name}</td>
-              <td className="py-2 text-right">
-                {item.quantity} {item.unit ?? ""}
-              </td>
-              <td className="py-2 text-right">
-                {item.unitPrice !== undefined ? rupees(item.unitPrice) : "—"}
-              </td>
-              <td className="py-2 text-right">{rupees(item.amount)}</td>
-            </tr>
-          ))}
-          {bill.charges.map((c, i) => (
-            <tr key={`c${i}`} className="border-t border-black/5 opacity-80 dark:border-white/10">
-              <td className="py-2" colSpan={3}>
-                {c.label}
-              </td>
-              <td className="py-2 text-right">{rupees(c.amount)}</td>
-            </tr>
-          ))}
-        </tbody>
-        <tfoot>
-          <tr className="border-t-2 border-black/20 text-base font-bold dark:border-white/30">
-            <td className="pt-3" colSpan={3}>
-              Total
-            </td>
-            <td className="pt-3 text-right">{rupees(bill.computedTotal)}</td>
-          </tr>
-        </tfoot>
-      </table>
+function EmptyReceipt() {
+  return (
+    <div className="receipt-edge bg-paper px-6 pt-8 opacity-90 shadow-[0_1px_0_var(--line)]">
+      <div className="space-y-3" aria-hidden="true">
+        <div className="h-6 w-2/5 rounded bg-surface-2" />
+        <div className="h-3 w-1/4 rounded bg-surface-2" />
+        {[70, 55, 62, 48].map((w) => (
+          <div key={w} className="flex justify-between gap-6 pt-2">
+            <div className="h-3 rounded bg-surface-2" style={{ width: `${w}%` }} />
+            <div className="h-3 w-14 rounded bg-surface-2" />
+          </div>
+        ))}
+      </div>
+      <div className="mt-8 flex flex-col items-center pb-2 text-center">
+        <span className="grid size-11 place-items-center rounded-2xl bg-brand-soft text-brand">
+          <Icon name="receipt" className="size-5" />
+        </span>
+        <p className="mt-3 font-medium">Your itemized bill appears here</p>
+        <p className="mt-1 text-sm text-muted">Add a bill on the left, or try a sample. Samples are instant.</p>
+      </div>
+    </div>
+  );
+}
 
-      {bill.totalMismatch && bill.statedTotal !== undefined && (
-        <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-200">
-          ⚠️ The bill says {rupees(bill.statedTotal)}, but the lines add up to{" "}
-          {rupees(bill.computedTotal)}. Check before collecting payment.
-        </p>
-      )}
-
-      {bill.notes.length > 0 && (
-        <ul className="mt-4 list-disc space-y-1 pl-5 text-sm opacity-70">
-          {bill.notes.map((n, i) => (
-            <li key={i}>{n}</li>
-          ))}
-        </ul>
-      )}
-
-      <CollectPayment bill={bill} />
-    </section>
+function ReadingReceipt({ step }: { step: string }) {
+  return (
+    <div className="receipt-edge bg-paper px-6 pt-8 shadow-[0_1px_0_var(--line)]">
+      <p className="flex items-center gap-2 text-sm font-medium text-brand">
+        <Icon name="sparkles" className="size-4 animate-pulse" />
+        {step}
+      </p>
+      <div className="mt-6 space-y-4" aria-hidden="true">
+        <div className="skeleton h-7 w-1/2 rounded" />
+        {[75, 60, 68, 52, 64].map((w) => (
+          <div key={w} className="flex justify-between gap-6">
+            <div className="skeleton h-3.5 rounded" style={{ width: `${w}%` }} />
+            <div className="skeleton h-3.5 w-16 rounded" />
+          </div>
+        ))}
+        <div className="skeleton mt-6 h-9 w-full rounded" />
+      </div>
+      <p className="mt-6 text-xs text-muted">Free-tier AI can take up to ~20 seconds.</p>
+    </div>
   );
 }

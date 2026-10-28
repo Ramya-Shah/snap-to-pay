@@ -2,7 +2,9 @@ import type { ParsedBill } from "./bill";
 
 export type Sample = {
   id: string;
+  kind: "photo" | "text" | "voice";
   label: string;
+  hint: string;
   image?: string;
   text?: string;
   bill: ParsedBill;
@@ -13,7 +15,9 @@ export type Sample = {
 export const SAMPLES: Sample[] = [
   {
     id: "photo",
-    label: "📷 Handwritten kirana bill",
+    kind: "photo",
+    label: "Handwritten kirana bill",
+    hint: "Photo · 8 lines",
     image: "/samples/kirana-bill.png",
     bill: {
       merchantName: "Sharma Kirana Store",
@@ -25,10 +29,9 @@ export const SAMPLES: Sample[] = [
           amount: 245,
         },
         {
-          name: "Split pigeon peas (Toor dal)",
+          name: "Split pigeon pea (Toor dal)",
           quantity: 1,
           unit: "kg",
-          unitPrice: 160,
           amount: 160,
         },
         {
@@ -39,7 +42,7 @@ export const SAMPLES: Sample[] = [
           amount: 68,
         },
         {
-          name: "Maggi noodles",
+          name: "Maggi",
           quantity: 4,
           unit: "pc",
           amount: 56,
@@ -48,7 +51,6 @@ export const SAMPLES: Sample[] = [
           name: "Sugar",
           quantity: 1,
           unit: "kg",
-          unitPrice: 48,
           amount: 48,
         },
         {
@@ -60,7 +62,7 @@ export const SAMPLES: Sample[] = [
         {
           name: "Coriander (Dhaniya)",
           quantity: 1,
-          unit: "packet",
+          unit: "pc",
           amount: 10,
         },
       ],
@@ -78,8 +80,10 @@ export const SAMPLES: Sample[] = [
   },
   {
     id: "whatsapp",
-    label: "💬 WhatsApp order (Hinglish)",
-    text: "Bhaiya 2 kg aloo 60, 1 dozen ande 84, Amul butter 500g 285, 2 packet bread 90. Delivery free",
+    kind: "text",
+    label: "WhatsApp order",
+    hint: "Hinglish · one item has no price",
+    text: "Bhaiya 2 kg aloo 60, 1 dozen ande 84, Amul butter 500g 285, 2 packet bread 90, aur thoda dhaniya bhi. Delivery free",
     bill: {
       items: [
         {
@@ -90,7 +94,7 @@ export const SAMPLES: Sample[] = [
           amount: 60,
         },
         {
-          name: "Eggs (ande)",
+          name: "Eggs",
           quantity: 1,
           unit: "dozen",
           unitPrice: 84,
@@ -110,6 +114,14 @@ export const SAMPLES: Sample[] = [
           unitPrice: 45,
           amount: 90,
         },
+        {
+          name: "Coriander (dhaniya)",
+          quantity: 1,
+          unit: "pc",
+          unitPrice: 0,
+          amount: 0,
+          check: "No price given",
+        },
       ],
       charges: [
         {
@@ -117,19 +129,21 @@ export const SAMPLES: Sample[] = [
           amount: 0,
         },
       ],
-      notes: [],
+      notes: ["Coriander price not specified in order"],
       computedTotal: 519,
       totalMismatch: false,
     },
   },
   {
     id: "voice",
-    label: "🎤 Spoken restaurant order",
+    kind: "voice",
+    label: "Spoken restaurant order",
+    hint: "Voice · adds 5% GST",
     text: "one plate paneer tikka two twenty, two butter naan forty each, one dal makhani two forty, add five percent GST",
     bill: {
       items: [
         {
-          name: "Paneer tikka",
+          name: "Cottage cheese tikka (paneer tikka)",
           quantity: 1,
           unit: "plate",
           unitPrice: 220,
@@ -143,7 +157,7 @@ export const SAMPLES: Sample[] = [
           amount: 80,
         },
         {
-          name: "Dal makhani",
+          name: "Black lentil curry (dal makhani)",
           quantity: 1,
           unit: "plate",
           unitPrice: 240,
@@ -156,7 +170,8 @@ export const SAMPLES: Sample[] = [
           amount: 27,
         },
       ],
-      notes: [],
+      statedTotal: 567,
+      notes: ["GST calculated as 5 percent of subtotal 540 rupees"],
       computedTotal: 567,
       totalMismatch: false,
     },

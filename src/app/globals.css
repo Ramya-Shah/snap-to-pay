@@ -1,26 +1,149 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --bg: #f6f4ef;
+  --surface: #ffffff;
+  --surface-2: #f1eee7;
+  --paper: #fffdf8;
+  --ink: #15181e;
+  --muted: #6a6f79;
+  --line: #e5e1d8;
+  --brand: #0e7a5c;
+  --brand-strong: #0a5c46;
+  --brand-soft: #e2f3ec;
+  --on-brand: #ffffff;
+  --marigold: #f0a92e;
+  --warn: #a5560a;
+  --warn-soft: #fdf1d8;
+  --danger: #b42318;
+  --danger-soft: #fdecea;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --bg: #0d0f12;
+    --surface: #15181d;
+    --surface-2: #1c2027;
+    --paper: #171a20;
+    --ink: #eceef1;
+    --muted: #9aa0aa;
+    --line: #2a2f37;
+    --brand: #35c79a;
+    --brand-strong: #63d9b4;
+    --brand-soft: #11332a;
+    --on-brand: #06231a;
+    --marigold: #f5b54a;
+    --warn: #f3b552;
+    --warn-soft: #36290f;
+    --danger: #f97066;
+    --danger-soft: #3a1714;
   }
 }
 
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-paper: var(--paper);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-brand: var(--brand);
+  --color-brand-strong: var(--brand-strong);
+  --color-brand-soft: var(--brand-soft);
+  --color-on-brand: var(--on-brand);
+  --color-marigold: var(--marigold);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --font-sans: var(--ff-body), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--ff-display), var(--ff-body), sans-serif;
+  --font-mono: var(--ff-mono), ui-monospace, monospace;
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+}
+
+/* Inputs inside the bill look like plain text until you point at them. */
+.field {
+  @apply w-full min-w-0 rounded-md border border-transparent bg-transparent px-1.5 py-1 outline-none transition-colors;
+}
+.field:not(:disabled):hover {
+  @apply border-line;
+}
+.field:focus {
+  @apply border-brand bg-surface;
+}
+.field::-webkit-outer-spin-button,
+.field::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.field[type="number"] {
+  -moz-appearance: textfield;
+}
+
+/* Torn-paper bottom edge for the receipt. */
+.receipt-edge {
+  --tooth: 12px;
+  mask:
+    conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) bottom / var(--tooth) 51% repeat-x,
+    linear-gradient(#000 0 0) top / 100% calc(100% - var(--tooth) / 2) no-repeat;
+  padding-bottom: calc(var(--tooth) + 1.5rem);
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+.skeleton {
+  background: linear-gradient(90deg, var(--surface-2) 25%, var(--line) 50%, var(--surface-2) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.6s linear infinite;
+}
+
+@keyframes pop {
+  0% {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  70% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.pop {
+  animation: pop 0.45s ease-out both;
+}
+
+@keyframes rise {
+  from {
+    transform: translateY(8px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+.rise {
+  animation: rise 0.35s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton,
+  .pop,
+  .rise {
+    animation: none;
+  }
 }

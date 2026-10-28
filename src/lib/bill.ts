@@ -20,6 +20,12 @@ export const billSchema = z.object({
           .optional()
           .describe("Price per unit in rupees, if known"),
         amount: z.number().describe("Line total in rupees"),
+        check: z
+          .string()
+          .optional()
+          .describe(
+            "Only for a line the shopkeeper should double-check (hard to read, guessed, or no price): a short reason. Leave out for clear lines.",
+          ),
       }),
     )
     .describe("One entry per product line"),
