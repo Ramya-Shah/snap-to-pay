@@ -1,36 +1,48 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Snap-to-Pay
 
-## Getting Started
+**Live:** https://snap-to-pay.vercel.app (Razorpay test mode, no real money moves)
 
-First, run the development server:
+Snap a bill, paste a WhatsApp order or speak it. Gemini turns it into an itemized bill, the
+shopkeeper checks it, and the customer pays through Razorpay from a QR code or a WhatsApp link.
+The shopkeeper's screen switches to "Paid" on its own.
+
+## What it does
+
+- **Reads messy input:** handwritten kirana bills, Hinglish WhatsApp orders, spoken orders.
+  Item names are translated, missing line totals are worked out, and GST or delivery become
+  separate charges.
+- **Flags what to double-check:** lines with no price or hard-to-read values show in amber.
+- **Every value is editable** before collecting; quantity × rate and the line amount stay in step.
+- **Collects payment:** a Razorpay order per bill, our own `/pay/[orderId]` page with Razorpay
+  Checkout, a QR code and a WhatsApp share link.
+- **Sample bills** show saved Gemini answers instantly, with no AI quota used.
+
+## Why the total can be trusted
+
+- Gemini's answer must match a Zod schema (used as its structured-output schema too).
+- The server re-adds every line itself; the browser's amount is never trusted.
+- "Paid" comes from Razorpay's own order status, and Checkout's signature is verified with HMAC.
+- Only `rzp_test_` keys are accepted, so this demo can never move real money.
+
+## Stack
+
+Next.js 16 (App Router) · React 19 · Tailwind CSS 4 · Gemini (`gemini-3.5-flash-lite`, free tier)
+via `@google/genai` · Razorpay Orders API + Checkout · Zod · Vercel.
+
+No database: each bill travels with its Razorpay order as notes.
+
+## Limits
+
+- Live AI reads: 10 per hour per visitor and 300 per day overall. Payment links: 20 per hour.
+  Counts use Upstash Redis when `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` are set,
+  otherwise memory (per server instance).
+
+## Run it locally
 
 ```bash
+npm install
+cp .env.example .env.local   # add a Gemini key and Razorpay test keys
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Pushes to `main` deploy to Vercel automatically.
