@@ -1,12 +1,11 @@
 import { ApiError } from "@google/genai";
 import { ZodError } from "zod";
+import { fail } from "@/lib/api";
 import { parseBill } from "@/lib/gemini";
 
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 const MAX_TEXT_CHARS = 4000;
 const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"];
-
-const fail = (status: number, error: string) => Response.json({ error }, { status });
 
 // POST multipart/form-data with an `image` file and/or a `text` field.
 export async function POST(request: Request) {

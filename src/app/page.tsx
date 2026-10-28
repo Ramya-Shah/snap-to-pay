@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { ParsedBill } from "@/lib/bill";
+import { rupees } from "@/lib/format";
+import { CollectPayment } from "./collect-payment";
 
 // Minimal typing for the browser Speech Recognition API (Chrome/Edge expose it as webkitSpeechRecognition).
 type Recognition = {
@@ -15,9 +17,6 @@ type Recognition = {
   stop(): void;
 };
 type RecognitionCtor = new () => Recognition;
-
-const rupees = (n: number) =>
-  `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 
 export default function Home() {
   const [text, setText] = useState("");
@@ -231,6 +230,8 @@ function BillView({ bill }: { bill: ParsedBill }) {
           ))}
         </ul>
       )}
+
+      <CollectPayment bill={bill} />
     </section>
   );
 }
