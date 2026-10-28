@@ -74,7 +74,7 @@ export function PayClient({ orderId }: { orderId: string }) {
         currency: order.currency,
         name: order.merchant,
         description: "Bill payment via Snap-to-Pay",
-        theme: { color: "#0e7a5c" },
+        theme: { color: "#a3325f" },
         handler: (success: CheckoutSuccess) =>
           confirmPaid(success)
             .catch((e: Error) => setError(e.message))
