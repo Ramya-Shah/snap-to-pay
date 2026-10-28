@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ParsedBill } from "@/lib/bill";
 import { rupees } from "@/lib/format";
+import { SAMPLES, type Sample } from "@/lib/samples";
 import { CollectPayment } from "./collect-payment";
 
 // Minimal typing for the browser Speech Recognition API (Chrome/Edge expose it as webkitSpeechRecognition).
@@ -25,7 +26,10 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [bill, setBill] = useState<ParsedBill | null>(null);
+  // Bumped for every new bill so its payment box starts fresh.
+  const [billRun, setBillRun] = useState(0);
   const [listening, setListening] = useState(false);
+  const [fromSample, setFromSample] = useState(false);
   const recognition = useRef<Recognition | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
@@ -70,10 +74,24 @@ export default function Home() {
     setListening(true);
   }
 
+  // Show the saved answer at once, and load the sample's input so "Itemize bill" can read it live.
+  async function trySample(sample: Sample) {
+    reset();
+    setText(sample.text ?? "");
+    setBill(sample.bill);
+    setBillRun((n) => n + 1);
+    setFromSample(true);
+    if (sample.image) {
+      const blob = await (await fetch(sample.image)).blob();
+      pickImage(new File([blob], sample.image.split("/").pop()!, { type: blob.type }));
+    }
+  }
+
   async function itemize() {
     setLoading(true);
     setError(null);
     setBill(null);
+    setFromSample(false);
     const form = new FormData();
     if (text.trim()) form.append("text", text.trim());
     if (image) form.append("image", image);
@@ -82,6 +100,7 @@ export default function Home() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Something went wrong.");
       setBill(data.bill);
+      setBillRun((n) => n + 1);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong.");
     } finally {
@@ -93,6 +112,7 @@ export default function Home() {
     setText("");
     pickImage(null);
     setBill(null);
+    setFromSample(false);
     setError(null);
     if (fileInput.current) fileInput.current.value = "";
   }
@@ -108,6 +128,22 @@ export default function Home() {
           payment.
         </p>
       </header>
+
+      <div className="mb-4">
+        <p className="text-xs font-medium uppercase tracking-wide opacity-60">Try a sample</p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {SAMPLES.map((s) => (
+            <button
+              key={s.id}
+              onClick={() => trySample(s)}
+              disabled={loading}
+              className="rounded-full border border-black/15 px-3 py-1.5 text-sm hover:border-blue-600 disabled:opacity-40 dark:border-white/20"
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
       <section className="space-y-4 rounded-2xl border border-black/10 p-5 dark:border-white/15">
         <label className="block">
@@ -165,15 +201,20 @@ export default function Home() {
         </p>
       )}
 
-      {bill && <BillView bill={bill} />}
+      {bill && <BillView key={billRun} bill={bill} fromSample={fromSample} />}
     </main>
   );
 }
 
-function BillView({ bill }: { bill: ParsedBill }) {
+function BillView({ bill, fromSample }: { bill: ParsedBill; fromSample: boolean }) {
   return (
     <section className="mt-8 rounded-2xl border border-black/10 p-5 dark:border-white/15">
       <h2 className="text-lg font-semibold">{bill.merchantName ?? "Itemized bill"}</h2>
+      {fromSample && (
+        <p className="mt-1 text-xs opacity-60">
+          Saved Gemini answer: instant, uses no AI quota. Press Itemize bill to read it live.
+        </p>
+      )}
 
       <table className="mt-4 w-full text-sm">
         <thead className="text-left opacity-60">

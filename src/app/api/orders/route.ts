@@ -1,6 +1,7 @@
 import { billSchema, withTotals } from "@/lib/bill";
-import { fail, razorpayFailure } from "@/lib/api";
+import { fail, razorpayFailure, tooMany } from "@/lib/api";
 import { createOrder } from "@/lib/razorpay";
+import { LIMITS, clientId, hit, waitText } from "@/lib/rate-limit";
 
 const MIN_RUPEES = 1;
 const MAX_RUPEES = 100_000;
@@ -21,6 +22,14 @@ export async function POST(request: Request) {
   const bill = withTotals(parsed.data);
   if (bill.computedTotal < MIN_RUPEES) return fail(400, "The bill total must be at least ₹1.");
   if (bill.computedTotal > MAX_RUPEES) return fail(400, "This demo collects at most ₹1,00,000.");
+
+  const limit = await hit(LIMITS.ordersPerIp, clientId(request));
+  if (!limit.ok) {
+    return tooMany(
+      limit.retryAfterSec,
+      `That's ${LIMITS.ordersPerIp.max} payment links this hour. Try again in ${waitText(limit.retryAfterSec)}.`,
+    );
+  }
 
   try {
     const orderId = await createOrder(bill);

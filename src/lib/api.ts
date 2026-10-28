@@ -2,6 +2,9 @@ import { RazorpayError } from "./razorpay";
 
 export const fail = (status: number, error: string) => Response.json({ error }, { status });
 
+export const tooMany = (retryAfterSec: number, error: string) =>
+  Response.json({ error }, { status: 429, headers: { "Retry-After": String(retryAfterSec) } });
+
 export const isOrderId = (id: string) => /^order_[A-Za-z0-9]{6,30}$/.test(id);
 
 export function razorpayFailure(err: unknown, action: string) {

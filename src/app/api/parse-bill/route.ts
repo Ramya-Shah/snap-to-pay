@@ -1,7 +1,8 @@
 import { ApiError } from "@google/genai";
 import { ZodError } from "zod";
-import { fail } from "@/lib/api";
+import { fail, tooMany } from "@/lib/api";
 import { parseBill } from "@/lib/gemini";
+import { LIMITS, clientId, hit, waitText } from "@/lib/rate-limit";
 
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 const MAX_TEXT_CHARS = 4000;
@@ -26,6 +27,22 @@ export async function POST(request: Request) {
     return fail(400, "Use a JPG, PNG, WebP or HEIC photo.");
   }
   if (image && image.size > MAX_IMAGE_BYTES) return fail(400, "Keep the photo under 8 MB.");
+
+  // Checked after validation so bad requests don't use up anyone's allowance.
+  const mine = await hit(LIMITS.aiPerIp, clientId(request));
+  if (!mine.ok) {
+    return tooMany(
+      mine.retryAfterSec,
+      `You've read ${LIMITS.aiPerIp.max} bills with live AI this hour. The sample bills still work, or try again in ${waitText(mine.retryAfterSec)}.`,
+    );
+  }
+  const everyone = await hit(LIMITS.aiPerDay, "all");
+  if (!everyone.ok) {
+    return tooMany(
+      everyone.retryAfterSec,
+      "The demo's free AI quota for today is used up. The sample bills still work without it.",
+    );
+  }
 
   try {
     const bill = await parseBill({

@@ -10,9 +10,10 @@ Extract every product line and every extra charge (delivery, GST, packing, disco
 - Amounts are in Indian rupees. Treat "Rs", "₹", "/-" as rupees.
 - Translate item names to plain English; keep a Hindi/regional name in brackets only if it helps, e.g. "Cottage cheese (paneer)".
 - If a line total is missing but quantity and unit price are present, compute it.
+- Branded packs: the size is not the quantity. "Amul butter 500g 285" is quantity 1, unit "pack", name "Amul butter (500 g)". Loose goods keep their weight as the quantity: "Atta 5kg 245" is quantity 5, unit "kg".
 - If a price is missing entirely, use 0 and add a note saying which item has no price.
 - Never invent items. If something is unreadable, add a note instead of guessing silently.
-- statedTotal is only the total actually written on the bill; leave it out if none is written.`;
+- statedTotal is only the total actually written on the bill; leave it out if none is written. Never fill it with a total you calculated.`;
 
 // Gemini's structured output takes a plain JSON Schema; drop the $schema key Zod adds.
 const responseJsonSchema: Record<string, unknown> = z.toJSONSchema(billSchema);
