@@ -11,6 +11,8 @@ Extract every product line and every extra charge (delivery, GST, packing, disco
 - Translate item names to plain English; keep a Hindi/regional name in brackets only if it helps, e.g. "Cottage cheese (paneer)".
 - If a line total is missing but quantity and unit price are present, compute it.
 - Branded packs: the size is not the quantity. "Amul butter 500g 285" is quantity 1, unit "pack", name "Amul butter (500 g)". Loose goods keep their weight as the quantity: "Atta 5kg 245" is quantity 5, unit "kg".
+- One price for several items together ("dono gandru aur bhindi 90", "onion and garlic together 50") is ONE item line: name "Cluster beans (gandru) 1 kg + Ladyfinger (bhindi) 2 kg", quantity 1, unit "lot", amount 90. Do not also list those items separately, and do not split the price between them.
+- charges are only for delivery, GST/tax, packing, service and discounts. A product's price is never a charge.
 - If a price is missing entirely, use 0 and set that line's check to "No price given".
 - Never invent items. If a line is hard to read or you had to guess, set its check with a short reason, e.g. "Price smudged: read as 45". Leave check out for clear lines.
 - notes are only for things about the whole bill, not single lines.
