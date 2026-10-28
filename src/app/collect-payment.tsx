@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import QRCode from "qrcode";
 import type { ParsedBill } from "@/lib/bill";
 import { rupees } from "@/lib/format";
@@ -109,13 +110,28 @@ export function CollectPayment({
         <span className="pop mx-auto grid size-14 place-items-center rounded-full bg-brand text-on-brand">
           <Icon name="check" className="size-7" />
         </span>
-        <p className="mt-3 font-display text-3xl font-bold tracking-tight text-brand">
+        <p className="mt-3 font-display text-3xl font-bold tracking-tight text-brand-ink">
           {rupees(link.amount)} received
         </p>
         <p className="mt-1 font-mono text-xs text-muted">
           {paid.method && `${paid.method.toUpperCase()} · `}
           {paid.paymentId}
         </p>
+        <div className="mt-4 flex flex-wrap justify-center gap-2">
+          <a
+            href={`/receipt/${link.orderId}`}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-surface px-3.5 py-2 text-sm font-semibold shadow-sm"
+          >
+            <Icon name="receipt" className="size-3.5" />
+            View receipt
+          </a>
+          <Link href="/payments" className="inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-medium hover:bg-surface">
+            <Icon name="list" className="size-3.5" />
+            All payments
+          </Link>
+        </div>
       </div>
     );
   }

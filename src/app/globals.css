@@ -1,43 +1,62 @@
 @import "tailwindcss";
 
 :root {
-  /* Palette: #F9F5F6, #F8E8EE, #FDCEDF, #F2BED1, plus a deeper rose of the same hue for text and buttons. */
-  --bg: #f9f5f6;
+  /* Palette: #00B8A9 teal, #F8F3D4 cream, #F6416C pink, #FFDE7D yellow. The exact colours are fills;
+     darker shades of the same hues carry text so it stays at 4.5:1 or better. */
+  --bg: #f8f3d4;
   --surface: #ffffff;
-  --surface-2: #f8e8ee;
-  --paper: #fffbfc;
-  --ink: #2b1d24;
-  --muted: #7b6370;
-  --line: #f2d3df;
-  --brand: #a3325f;
-  --brand-strong: #86284d;
-  --brand-soft: #fdcedf;
-  --on-brand: #ffffff;
-  --marigold: #e8a33a;
-  --warn: #9a5a0a;
-  --warn-soft: #fdf1d8;
-  --danger: #b42318;
-  --danger-soft: #fdecea;
+  --surface-2: #f2ebc4;
+  --paper: #fffdf2;
+  --ink: #1e2b2a;
+  --muted: #5c6660;
+  --line: #e7dfb4;
+  --brand: #00b8a9;
+  --brand-strong: #00a396;
+  --brand-soft: #ccf1ec;
+  --brand-ink: #00756b;
+  --on-brand: #04302c;
+  --accent: #f6416c;
+  --marigold: #ffde7d;
+  --warn: #7a4f00;
+  --warn-soft: #fff0bf;
+  --danger: #c42a3a;
+  --danger-soft: #fde8ea;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #1b1317;
-    --surface: #241a1f;
-    --surface-2: #2e2128;
-    --paper: #261b21;
-    --ink: #f9f5f6;
-    --muted: #bca6b1;
-    --line: #3d2c35;
-    --brand: #f2bed1;
-    --brand-strong: #fdcedf;
-    --brand-soft: #3a2230;
-    --on-brand: #3d1527;
-    --marigold: #f5b54a;
-    --warn: #f3b552;
-    --warn-soft: #36290f;
-    --danger: #f97066;
-    --danger-soft: #3a1714;
+    --bg: #0f1e1d;
+    --surface: #162927;
+    --surface-2: #1d3431;
+    --paper: #182c2a;
+    --ink: #f8f3d4;
+    --muted: #a8b5ac;
+    --line: #2a4340;
+    --brand: #00b8a9;
+    --brand-strong: #19ccbd;
+    --brand-soft: #0e3b37;
+    --brand-ink: #4fd9cc;
+    --on-brand: #04302c;
+    --accent: #f6416c;
+    --marigold: #ffde7d;
+    --warn: #ffde7d;
+    --warn-soft: #3a3214;
+    --danger: #ff7a85;
+    --danger-soft: #3c1a1e;
+  }
+}
+
+/* Receipts print as a plain light invoice, whatever theme the screen uses. */
+@media print {
+  :root {
+    --bg: #ffffff;
+    --surface: #ffffff;
+    --surface-2: #f4f4f4;
+    --paper: #ffffff;
+    --ink: #111111;
+    --muted: #555555;
+    --line: #dddddd;
+    --brand-ink: #00756b;
   }
 }
 
@@ -52,6 +71,8 @@
   --color-brand: var(--brand);
   --color-brand-strong: var(--brand-strong);
   --color-brand-soft: var(--brand-soft);
+  --color-brand-ink: var(--brand-ink);
+  --color-accent: var(--accent);
   --color-on-brand: var(--on-brand);
   --color-marigold: var(--marigold);
   --color-warn: var(--warn);

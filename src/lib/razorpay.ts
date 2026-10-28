@@ -53,15 +53,22 @@ type RazorpayOrder = {
   amount: number;
   amount_paid: number;
   currency: string;
+  receipt: string | null;
   status: "created" | "attempted" | "paid";
   notes: Record<string, string> | [];
+  created_at: number; // unix seconds
 };
 
 type RazorpayPayment = {
   id: string;
+  order_id: string | null;
   status: "created" | "authorized" | "captured" | "refunded" | "failed";
   method: string;
+  created_at: number;
 };
+
+// Every order this app creates has a receipt starting with this, so other orders on the account are skipped.
+const RECEIPT_PREFIX = "stp_";
 
 export type OrderView = {
   orderId: string;
@@ -73,6 +80,9 @@ export type OrderView = {
   status: "unpaid" | "paid";
   paymentId?: string;
   method?: string;
+  invoiceNo: string;
+  createdAt: number; // unix seconds
+  paidAt?: number;
 };
 
 const clip = (s: string) => (s.length > MAX_NOTE ? `${s.slice(0, MAX_NOTE - 1)}…` : s);
@@ -98,21 +108,15 @@ export async function createOrder(bill: ParsedBill) {
     body: {
       amount: Math.round(bill.computedTotal * 100),
       currency: "INR",
-      receipt: `stp_${Date.now().toString(36)}`,
+      receipt: `${RECEIPT_PREFIX}${Date.now().toString(36)}`,
       notes: billNotes(bill),
     },
   });
   return order.id;
 }
 
-export async function getOrder(orderId: string): Promise<OrderView> {
-  const { keyId } = keys();
-  const [order, payments] = await Promise.all([
-    call<RazorpayOrder>(`/orders/${encodeURIComponent(orderId)}`),
-    call<{ items: RazorpayPayment[] }>(`/orders/${encodeURIComponent(orderId)}/payments`),
-  ]);
+function toView(order: RazorpayOrder, keyId: string, captured?: RazorpayPayment): OrderView {
   const notes = Array.isArray(order.notes) ? {} : order.notes;
-  const captured = payments.items.find((p) => p.status === "captured");
   return {
     orderId: order.id,
     keyId,
@@ -126,7 +130,34 @@ export async function getOrder(orderId: string): Promise<OrderView> {
     status: order.status === "paid" || captured ? "paid" : "unpaid",
     paymentId: captured?.id,
     method: captured?.method,
+    invoiceNo: (order.receipt ?? order.id).toUpperCase(),
+    createdAt: order.created_at,
+    paidAt: captured?.created_at,
   };
+}
+
+export async function getOrder(orderId: string): Promise<OrderView> {
+  const { keyId } = keys();
+  const [order, payments] = await Promise.all([
+    call<RazorpayOrder>(`/orders/${encodeURIComponent(orderId)}`),
+    call<{ items: RazorpayPayment[] }>(`/orders/${encodeURIComponent(orderId)}/payments`),
+  ]);
+  return toView(order, keyId, payments.items.find((p) => p.status === "captured"));
+}
+
+// The shop's latest bills, newest first. Two list calls instead of one per order.
+export async function listOrders(): Promise<OrderView[]> {
+  const { keyId } = keys();
+  const [orders, payments] = await Promise.all([
+    call<{ items: RazorpayOrder[] }>("/orders?count=100"),
+    call<{ items: RazorpayPayment[] }>("/payments?count=100"),
+  ]);
+  const captured = new Map(
+    payments.items.filter((p) => p.status === "captured" && p.order_id).map((p) => [p.order_id, p]),
+  );
+  return orders.items
+    .filter((o) => o.receipt?.startsWith(RECEIPT_PREFIX))
+    .map((o) => toView(o, keyId, captured.get(o.id)));
 }
 
 // Checkout's success callback is only trusted once this signature matches.

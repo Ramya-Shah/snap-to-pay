@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type DragEvent } from "react";
 import type { ParsedBill } from "@/lib/bill";
 import { SAMPLES, type Sample } from "@/lib/samples";
 import { BillEditor } from "./bill-editor";
-import { Logo, TestModeBadge } from "./ui/brand";
+import { Logo, PaymentsLink, TestModeBadge } from "./ui/brand";
 import { HowItWorks } from "./ui/how-it-works";
 import { Icon, type IconName } from "./ui/icons";
 
@@ -202,15 +202,18 @@ export default function Home() {
     <div className="mx-auto w-full max-w-6xl px-4 sm:px-6">
       <nav className="flex items-center justify-between gap-3 py-5">
         <Logo />
-        <TestModeBadge />
+        <div className="flex items-center gap-2">
+          <PaymentsLink />
+          <TestModeBadge />
+        </div>
       </nav>
 
       <header className="max-w-3xl pt-8 pb-10 sm:pt-12">
-        <p className="text-sm font-semibold tracking-wide text-brand uppercase">AI bill reader × Razorpay</p>
+        <p className="text-sm font-semibold tracking-wide text-brand-ink uppercase">AI bill reader × Razorpay</p>
         <h1 className="mt-3 font-display text-5xl leading-[0.95] font-extrabold tracking-tight sm:text-7xl">
           Snap a bill.
           <br />
-          <span className="text-brand">Get paid.</span>
+          <span className="text-accent">Get paid.</span>
         </h1>
         <p className="mt-5 max-w-xl text-lg text-muted">
           A handwritten bill, a WhatsApp order or a voice note becomes an itemized bill in seconds, then
@@ -270,7 +273,7 @@ export default function Home() {
                   </>
                 ) : (
                   <div className="px-6 text-center">
-                    <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-brand-soft text-brand">
+                    <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-brand-soft text-brand-ink">
                       <Icon name="upload" className="size-5" />
                     </span>
                     <p className="mt-3 font-medium">Drop a bill photo, or tap to take one</p>
@@ -354,14 +357,14 @@ export default function Home() {
                     disabled={loading}
                     className="group flex w-full items-center gap-3 rounded-xl border border-line p-3 text-left transition hover:border-brand/50 hover:bg-surface-2 disabled:opacity-40"
                   >
-                    <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-surface-2 text-muted group-hover:bg-brand-soft group-hover:text-brand">
+                    <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-surface-2 text-muted group-hover:bg-brand-soft group-hover:text-brand-ink">
                       <Icon name={MODES.find((m) => m.id === s.kind)!.icon} />
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block text-sm font-medium">{s.label}</span>
                       <span className="block truncate text-xs text-muted">{s.hint}</span>
                     </span>
-                    <Icon name="arrow" className="size-4 text-muted transition group-hover:translate-x-0.5 group-hover:text-brand" />
+                    <Icon name="arrow" className="size-4 text-muted transition group-hover:translate-x-0.5 group-hover:text-brand-ink" />
                   </button>
                 </li>
               ))}
@@ -427,7 +430,7 @@ function EmptyReceipt() {
         ))}
       </div>
       <div className="mt-8 flex flex-col items-center pb-2 text-center">
-        <span className="grid size-11 place-items-center rounded-2xl bg-brand-soft text-brand">
+        <span className="grid size-11 place-items-center rounded-2xl bg-brand-soft text-brand-ink">
           <Icon name="receipt" className="size-5" />
         </span>
         <p className="mt-3 font-medium">Your itemized bill appears here</p>
@@ -440,7 +443,7 @@ function EmptyReceipt() {
 function ReadingReceipt({ step }: { step: string }) {
   return (
     <div className="receipt-edge bg-paper px-6 pt-8 shadow-[0_1px_0_var(--line)]">
-      <p className="flex items-center gap-2 text-sm font-medium text-brand">
+      <p className="flex items-center gap-2 text-sm font-medium text-brand-ink">
         <Icon name="sparkles" className="size-4 animate-pulse" />
         {step}
       </p>

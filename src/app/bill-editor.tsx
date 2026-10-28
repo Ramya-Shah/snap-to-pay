@@ -65,7 +65,7 @@ export function BillEditor({ initial, fromSample }: { initial: ParsedBill; fromS
               {draft.items.length} {draft.items.length === 1 ? "item" : "items"}
             </p>
           </div>
-          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-brand-soft px-2.5 py-1 text-xs font-medium text-brand">
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-brand-soft px-2.5 py-1 text-xs font-medium text-brand-ink">
             <Icon name="sparkles" className="size-3.5" />
             {fromSample ? "Saved AI answer" : "Read by Gemini"}
           </span>
@@ -293,7 +293,7 @@ function AddButton({ onClick, children }: { onClick: () => void; children: strin
   return (
     <button
       onClick={onClick}
-      className="inline-flex items-center gap-1 rounded-lg px-2 py-1 font-medium text-brand hover:bg-brand-soft"
+      className="inline-flex items-center gap-1 rounded-lg px-2 py-1 font-medium text-brand-ink hover:bg-brand-soft"
     >
       <Icon name="plus" className="size-3.5" />
       {children}

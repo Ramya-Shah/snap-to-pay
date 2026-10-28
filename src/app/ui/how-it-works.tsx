@@ -19,7 +19,7 @@ export function HowItWorks() {
         {STEPS.map((step, i) => (
           <li key={step.title} className="relative rounded-2xl border border-line bg-surface p-5">
             <div className="flex items-center justify-between">
-              <span className="grid size-10 place-items-center rounded-xl bg-brand-soft text-brand">
+              <span className="grid size-10 place-items-center rounded-xl bg-brand-soft text-brand-ink">
                 <Icon name={step.icon} className="size-5" />
               </span>
               <span className="font-mono text-xs text-muted">0{i + 1}</span>

@@ -37,6 +37,13 @@ const PATHS = {
       <path d="M12 9v4M12 17h.01" />
     </>
   ),
+  download: (
+    <>
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <path d="m7 10 5 5 5-5M12 15V3" />
+    </>
+  ),
+  list: <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />,
   upload: (
     <>
       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />

@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { rupees } from "@/lib/format";
 import type { OrderView } from "@/lib/razorpay";
@@ -37,10 +39,16 @@ export function PayClient({ orderId }: { orderId: string }) {
   const [order, setOrder] = useState<OrderView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const router = useRouter();
+  const receiptUrl = `/receipt/${orderId}`;
 
+  // A bill that is already paid has nothing left to pay: show its receipt instead.
   useEffect(() => {
-    fetchOrder(orderId).then(setOrder, (e: Error) => setError(e.message));
-  }, [orderId]);
+    fetchOrder(orderId).then(
+      (o) => (o.status === "paid" ? router.replace(receiptUrl) : setOrder(o)),
+      (e: Error) => setError(e.message),
+    );
+  }, [orderId, router, receiptUrl]);
 
   async function confirmPaid(success: CheckoutSuccess) {
     const res = await fetch(`/api/orders/${orderId}/verify`, {
@@ -55,7 +63,7 @@ export function PayClient({ orderId }: { orderId: string }) {
     // Capture can lag the success callback by a moment; re-check a few times.
     for (let i = 0; i < 5; i++) {
       const latest = await fetchOrder(orderId);
-      if (latest.status === "paid") return setOrder(latest);
+      if (latest.status === "paid") return router.replace(receiptUrl);
       await new Promise((r) => setTimeout(r, 1500));
     }
     setOrder((o) => o && { ...o, status: "paid", paymentId: success.razorpay_payment_id });
@@ -74,7 +82,7 @@ export function PayClient({ orderId }: { orderId: string }) {
         currency: order.currency,
         name: order.merchant,
         description: "Bill payment via Snap-to-Pay",
-        theme: { color: "#a3325f" },
+        theme: { color: "#00b8a9" },
         handler: (success: CheckoutSuccess) =>
           confirmPaid(success)
             .catch((e: Error) => setError(e.message))
@@ -135,8 +143,11 @@ export function PayClient({ orderId }: { orderId: string }) {
           <span className="pop mx-auto grid size-14 place-items-center rounded-full bg-brand text-on-brand">
             <Icon name="check" className="size-7" />
           </span>
-          <p className="mt-3 font-display text-2xl font-bold text-brand">Paid. Thank you!</p>
+          <p className="mt-3 font-display text-2xl font-bold text-brand-ink">Paid. Thank you!</p>
           {order.paymentId && <p className="mt-1 font-mono text-xs text-muted">{order.paymentId}</p>}
+          <Link href={receiptUrl} className="mt-3 inline-block text-sm font-semibold text-brand-ink underline-offset-2 hover:underline">
+            View receipt
+          </Link>
         </div>
       ) : (
         <button
