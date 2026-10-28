@@ -6,6 +6,7 @@ export type Sample = {
   label: string;
   hint: string;
   image?: string;
+  audio?: string;
   text?: string;
   bill: ParsedBill;
 };
@@ -138,12 +139,12 @@ export const SAMPLES: Sample[] = [
     id: "voice",
     kind: "voice",
     label: "Spoken restaurant order",
-    hint: "Voice · adds 5% GST",
-    text: "one plate paneer tikka two twenty, two butter naan forty each, one dal makhani two forty, add five percent GST",
+    hint: "Voice recording · adds 5% GST",
+    audio: "/samples/restaurant-order.wav",
     bill: {
       items: [
         {
-          name: "Cottage cheese tikka (paneer tikka)",
+          name: "Paneer tikka",
           quantity: 1,
           unit: "plate",
           unitPrice: 220,
@@ -157,21 +158,22 @@ export const SAMPLES: Sample[] = [
           amount: 80,
         },
         {
-          name: "Black lentil curry (dal makhani)",
+          name: "Dal makhani",
           quantity: 1,
-          unit: "plate",
+          unit: "portion",
           unitPrice: 240,
           amount: 240,
         },
       ],
       charges: [
         {
-          label: "GST",
+          label: "GST 5%",
           amount: 27,
         },
       ],
-      statedTotal: 567,
-      notes: ["GST calculated as 5 percent of subtotal 540 rupees"],
+      transcript:
+        "1 plate paneer tikka 220, 2 butter naan 40 each, 1 dal makhani 240, and add 5% GST.",
+      notes: [],
       computedTotal: 567,
       totalMismatch: false,
     },

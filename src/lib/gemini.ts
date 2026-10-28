@@ -14,6 +14,7 @@ Extract every product line and every extra charge (delivery, GST, packing, disco
 - If a price is missing entirely, use 0 and set that line's check to "No price given".
 - Never invent items. If a line is hard to read or you had to guess, set its check with a short reason, e.g. "Price smudged: read as 45". Leave check out for clear lines.
 - notes are only for things about the whole bill, not single lines.
+- For a voice recording, also fill transcript with what was said, in the words used (Hindi words in Roman script), numbers as digits. Spoken numbers like "one twenty" mean 120 rupees.
 - statedTotal is only the total actually written on the bill; leave it out if none is written. Never fill it with a total you calculated.`;
 
 // Gemini's structured output takes a plain JSON Schema; drop the $schema key Zod adds.
@@ -31,15 +32,15 @@ function getClient() {
 
 export type BillInput = {
   text?: string;
-  image?: { mimeType: string; base64: string };
+  // A bill photo or a voice recording; Gemini reads both directly.
+  media?: { kind: "image" | "audio"; mimeType: string; base64: string };
 };
 
 export async function parseBill(input: BillInput): Promise<ParsedBill> {
   const parts = [];
-  if (input.image) {
-    parts.push({
-      inlineData: { mimeType: input.image.mimeType, data: input.image.base64 },
-    });
+  if (input.media) {
+    parts.push({ text: input.media.kind === "audio" ? "Voice recording of the order:" : "Photo of the bill:" });
+    parts.push({ inlineData: { mimeType: input.media.mimeType, data: input.media.base64 } });
   }
   if (input.text) {
     parts.push({ text: `Order text:\n${input.text}` });

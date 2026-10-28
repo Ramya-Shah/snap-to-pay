@@ -8,19 +8,6 @@ import { Logo, TestModeBadge } from "./ui/brand";
 import { HowItWorks } from "./ui/how-it-works";
 import { Icon, type IconName } from "./ui/icons";
 
-// Minimal typing for the browser Speech Recognition API (Chrome/Edge expose it as webkitSpeechRecognition).
-type Recognition = {
-  lang: string;
-  interimResults: boolean;
-  continuous: boolean;
-  onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
-  onend: (() => void) | null;
-  onerror: (() => void) | null;
-  start(): void;
-  stop(): void;
-};
-type RecognitionCtor = new () => Recognition;
-
 type Mode = Sample["kind"];
 
 const MODES: { id: Mode; label: string; icon: IconName }[] = [
@@ -28,6 +15,8 @@ const MODES: { id: Mode; label: string; icon: IconName }[] = [
   { id: "text", label: "Type", icon: "message" },
   { id: "voice", label: "Speak", icon: "mic" },
 ];
+
+const MAX_RECORDING_SEC = 60;
 
 const READING_STEPS = ["Reading the bill…", "Translating item names…", "Checking the maths…", "Almost there…"];
 
@@ -46,8 +35,12 @@ export default function Home() {
   // Bumped for every new bill so the editor and its payment box start fresh.
   const [billRun, setBillRun] = useState(0);
   const [fromSample, setFromSample] = useState(false);
-  const [listening, setListening] = useState(false);
-  const recognition = useRef<Recognition | null>(null);
+  const [audio, setAudio] = useState<Blob | null>(null);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [heard, setHeard] = useState<string | null>(null);
+  const [recording, setRecording] = useState(false);
+  const [seconds, setSeconds] = useState(0);
+  const recorder = useRef<MediaRecorder | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const resultPanel = useRef<HTMLElement>(null);
 
@@ -55,6 +48,22 @@ export default function Home() {
   useEffect(() => () => {
     if (preview) URL.revokeObjectURL(preview);
   }, [preview]);
+
+  useEffect(() => () => {
+    if (audioUrl) URL.revokeObjectURL(audioUrl);
+  }, [audioUrl]);
+
+  useEffect(() => {
+    if (!recording) return;
+    // Measured from the start, so throttled timers in background tabs can't drift it.
+    const startedAt = Date.now();
+    const timer = setInterval(() => setSeconds(Math.floor((Date.now() - startedAt) / 1000)), 250);
+    return () => clearInterval(timer);
+  }, [recording]);
+
+  useEffect(() => {
+    if (recording && seconds >= MAX_RECORDING_SEC) recorder.current?.stop();
+  }, [recording, seconds]);
 
   // Free-tier Gemini can take a while; show what it is doing.
   useEffect(() => {
@@ -78,36 +87,46 @@ export default function Home() {
     if (file?.type.startsWith("image/")) pickImage(file);
   }
 
-  function toggleVoice() {
-    if (listening) {
-      recognition.current?.stop();
+  function pickAudio(blob: Blob | null) {
+    setAudio(blob);
+    setAudioUrl(blob ? URL.createObjectURL(blob) : null);
+  }
+
+  // Record with the microphone; Gemini listens to the recording itself, which copes with
+  // Indian English, Hinglish, units and prices far better than the browser's speech engine.
+  async function toggleRecording() {
+    if (recording) {
+      recorder.current?.stop();
       return;
     }
-    const w = window as unknown as {
-      SpeechRecognition?: RecognitionCtor;
-      webkitSpeechRecognition?: RecognitionCtor;
-    };
-    const SpeechCtor = w.SpeechRecognition ?? w.webkitSpeechRecognition;
-    if (!SpeechCtor) {
-      setError("Voice input needs Chrome or Edge. You can type the order instead.");
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      setError("Recording isn't supported in this browser. Type the order instead.");
+      return;
+    }
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch {
+      setError("Allow microphone access to record the order, or type it instead.");
       return;
     }
     setError(null);
-    const r = new SpeechCtor();
-    r.lang = "en-IN";
-    r.interimResults = false;
-    r.continuous = true;
-    r.onresult = (e) => {
-      const spoken = Array.from(e.results)
-        .map((res) => res[0].transcript)
-        .join(" ");
-      setText((t) => (t ? `${t} ${spoken}` : spoken));
+    setHeard(null);
+    const r = new MediaRecorder(stream);
+    const chunks: Blob[] = [];
+    r.ondataavailable = (e) => chunks.push(e.data);
+    r.onstop = () => {
+      stream.getTracks().forEach((t) => t.stop());
+      setRecording(false);
+      const blob = new Blob(chunks, { type: r.mimeType });
+      if (blob.size === 0) return;
+      pickAudio(blob);
+      itemize(blob);
     };
-    r.onend = () => setListening(false);
-    r.onerror = () => setListening(false);
-    recognition.current = r;
+    recorder.current = r;
     r.start();
-    setListening(true);
+    setSeconds(0);
+    setRecording(true);
   }
 
   function showBill(next: ParsedBill, sample: boolean) {
@@ -127,15 +146,19 @@ export default function Home() {
     reset();
     setMode(sample.kind);
     setText(sample.text ?? "");
+    setHeard(sample.bill.transcript ?? null);
     showBill(sample.bill, true);
     revealResult();
     if (sample.image) {
       const blob = await (await fetch(sample.image)).blob();
       pickImage(new File([blob], sample.image.split("/").pop()!, { type: blob.type }));
     }
+    if (sample.audio) pickAudio(await (await fetch(sample.audio)).blob());
   }
 
-  async function itemize() {
+  // `recorded` is passed straight from the recorder, before the audio state has updated.
+  async function itemize(recorded?: Blob) {
+    const voice = recorded ?? audio;
     setLoading(true);
     setReadingStep(0);
     setError(null);
@@ -143,12 +166,14 @@ export default function Home() {
     revealResult();
     const form = new FormData();
     if (mode === "photo" && image) form.append("image", image);
-    if (mode !== "photo" && text.trim()) form.append("text", text.trim());
+    if (mode === "voice" && voice) form.append("audio", voice, `order.${voice.type.includes("mp4") ? "m4a" : "webm"}`);
+    if (mode === "text" && text.trim()) form.append("text", text.trim());
     try {
       const res = await fetch("/api/parse-bill", { method: "POST", body: form });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Something went wrong.");
       showBill(data.bill, false);
+      if (mode === "voice") setHeard(data.bill.transcript ?? null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong.");
     } finally {
@@ -157,15 +182,21 @@ export default function Home() {
   }
 
   function reset() {
+    recorder.current?.stop();
     setText("");
     pickImage(null);
+    pickAudio(null);
+    setHeard(null);
     setBill(null);
     setFromSample(false);
     setError(null);
     if (fileInput.current) fileInput.current.value = "";
   }
 
-  const canSubmit = !loading && (mode === "photo" ? image !== null : text.trim().length > 0);
+  const canSubmit =
+    !loading &&
+    !recording &&
+    (mode === "photo" ? image !== null : mode === "voice" ? audio !== null : text.trim().length > 0);
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 sm:px-6">
@@ -250,35 +281,49 @@ export default function Home() {
             )}
 
             {mode === "voice" && (
-              <div className="flex flex-col items-center rounded-2xl bg-surface-2 py-6">
+              <div className="flex flex-col items-center rounded-2xl bg-surface-2 px-4 py-6 text-center">
                 <button
-                  onClick={toggleVoice}
-                  aria-label={listening ? "Stop listening" : "Start speaking"}
-                  className={`relative grid size-20 place-items-center rounded-full transition ${
-                    listening ? "bg-danger text-white" : "bg-brand text-on-brand hover:bg-brand-strong"
+                  onClick={toggleRecording}
+                  disabled={loading}
+                  aria-label={recording ? "Stop recording" : "Start recording"}
+                  className={`relative grid size-20 place-items-center rounded-full transition disabled:opacity-40 ${
+                    recording ? "bg-danger text-white" : "bg-brand text-on-brand hover:bg-brand-strong"
                   }`}
                 >
-                  {listening && <span className="absolute inset-0 animate-ping rounded-full bg-danger/40" />}
-                  <Icon name={listening ? "x" : "mic"} className="relative size-8" />
+                  {recording && <span className="absolute inset-0 animate-ping rounded-full bg-danger/40" />}
+                  <Icon name={recording ? "stop" : "mic"} className="relative size-8" />
                 </button>
-                <p className="mt-3 text-sm font-medium">{listening ? "Listening… tap to stop" : "Tap and say the order"}</p>
-                <p className="mt-0.5 text-xs text-muted">e.g. “two kg tomatoes eighty, one paneer one twenty”</p>
+                <p className="mt-3 text-sm font-medium">
+                  {recording
+                    ? `Recording ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")} · tap to stop`
+                    : audio
+                      ? "Tap to record again"
+                      : "Tap and say the order"}
+                </p>
+                <p className="mt-0.5 text-xs text-muted">
+                  English, Hindi or both · up to {MAX_RECORDING_SEC} seconds · e.g. “do kilo tamatar assi, ek paneer ek sau bees”
+                </p>
+                {audioUrl && !recording && (
+                  // Lets people hear what was sent to the AI.
+                  <audio controls src={audioUrl} className="mt-4 h-10 w-full max-w-xs" />
+                )}
               </div>
             )}
 
-            {mode !== "photo" && (
+            {mode === "voice" && heard && (
+              <p className="mt-3 rounded-2xl border border-line p-4 text-sm">
+                <span className="block text-xs font-semibold tracking-wide text-muted uppercase">Gemini heard</span>
+                <span className="mt-1 block">“{heard}”</span>
+              </p>
+            )}
+
+            {mode === "text" && (
               <textarea
                 value={text}
                 onChange={(e) => setText(e.target.value)}
-                rows={mode === "voice" ? 3 : 6}
-                placeholder={
-                  mode === "voice"
-                    ? "What you say appears here. You can fix it before itemizing."
-                    : "Paste a WhatsApp order, e.g.\n2 kg tomatoes 80, 1 paneer 120, delivery 40"
-                }
-                className={`w-full resize-none rounded-2xl border border-line bg-surface p-4 text-sm outline-none placeholder:text-muted/70 focus:border-brand ${
-                  mode === "voice" ? "mt-3" : ""
-                }`}
+                rows={6}
+                placeholder={"Paste a WhatsApp order, e.g.\n2 kg tomatoes 80, 1 paneer 120, delivery 40"}
+                className="w-full resize-none rounded-2xl border border-line bg-surface p-4 text-sm outline-none placeholder:text-muted/70 focus:border-brand"
               />
             )}
           </div>
@@ -291,7 +336,7 @@ export default function Home() {
           )}
 
           <button
-            onClick={itemize}
+            onClick={() => itemize()}
             disabled={!canSubmit}
             className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-ink px-5 py-3.5 font-semibold text-bg transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-30"
           >

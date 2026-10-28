@@ -22,6 +22,7 @@ const PATHS = {
     </>
   ),
   check: <path d="M20 6 9 17l-5-5" />,
+  stop: <rect width="12" height="12" x="6" y="6" rx="2" />,
   plus: <path d="M5 12h14M12 5v14" />,
   x: <path d="M18 6 6 18M6 6l12 12" />,
   copy: (

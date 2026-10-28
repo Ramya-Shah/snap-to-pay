@@ -43,6 +43,10 @@ export const billSchema = z.object({
     .number()
     .optional()
     .describe("The grand total written on the bill, if any"),
+  transcript: z
+    .string()
+    .optional()
+    .describe("Only for a voice recording: what was said. Leave out otherwise."),
   notes: z
     .array(z.string())
     .describe(
