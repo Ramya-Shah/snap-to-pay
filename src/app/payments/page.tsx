@@ -5,6 +5,7 @@ import { indiaDay, indiaTime, methodLabel, rupees } from "@/lib/format";
 import { listOrders } from "@/lib/razorpay";
 import { Logo, PaymentsLink, TestModeBadge } from "../ui/brand";
 import { Icon } from "../ui/icons";
+import { SalesAssistant } from "./sales-assistant";
 
 export const metadata = { title: "Payments · Snap-to-Pay" };
 
@@ -32,6 +33,7 @@ export default function PaymentsPage() {
         </Link>
       </header>
       <main className="pb-16">
+        <SalesAssistant />
         <Suspense fallback={<PaymentsSkeleton />}>
           <PaymentList />
         </Suspense>

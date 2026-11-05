@@ -1,9 +1,11 @@
 import "server-only";
-import { GoogleGenAI } from "@google/genai";
+import { ApiError, GoogleGenAI, type GenerateContentParameters } from "@google/genai";
 import { z } from "zod";
 import { billSchema, withTotals, type ParsedBill } from "./bill";
 
-const MODEL = process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite";
+export const MODEL = process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite";
+// Faster, but with a much smaller free daily quota, so it is only used when MODEL is overloaded.
+export const FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL ?? "gemini-3.6-flash";
 
 const PROMPT = `You read bills and orders from small Indian shops: handwritten bills, printed receipts, WhatsApp order messages and spoken orders.
 Extract every product line and every extra charge (delivery, GST, packing, discount).
@@ -24,12 +26,28 @@ const responseJsonSchema: Record<string, unknown> = z.toJSONSchema(billSchema);
 delete responseJsonSchema.$schema;
 
 let client: GoogleGenAI | undefined;
-function getClient() {
+export function getClient() {
   if (!process.env.GEMINI_API_KEY) {
     throw new Error("GEMINI_API_KEY is not set. Add it to .env.local.");
   }
   client ??= new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
   return client;
+}
+
+const isBusy = (err: unknown) => err instanceof ApiError && err.status === 503;
+
+// Free-tier models often answer 503 "high demand". Try the fallback model, then the main one once more.
+// Returns the model that answered so a multi-step conversation can stay on it.
+export async function generate(request: Omit<GenerateContentParameters, "model">, model = MODEL) {
+  const order = model === FALLBACK_MODEL ? [FALLBACK_MODEL, MODEL] : [model, FALLBACK_MODEL, model];
+  for (let i = 0; ; i++) {
+    try {
+      return { response: await getClient().models.generateContent({ ...request, model: order[i] }), model: order[i] };
+    } catch (err) {
+      if (!isBusy(err) || i === order.length - 1) throw err;
+      if (order[i + 1] === order[i - 1]) await new Promise((r) => setTimeout(r, 1500));
+    }
+  }
 }
 
 export type BillInput = {
@@ -48,8 +66,7 @@ export async function parseBill(input: BillInput): Promise<ParsedBill> {
     parts.push({ text: `Order text:\n${input.text}` });
   }
 
-  const response = await getClient().models.generateContent({
-    model: MODEL,
+  const { response } = await generate({
     contents: [{ role: "user", parts }],
     config: {
       systemInstruction: PROMPT,

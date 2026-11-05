@@ -8,6 +8,8 @@ export const LIMITS = {
   // Whole-site cap that keeps the demo under the free Gemini daily quota.
   aiPerDay: { name: "ai-all", max: 300, windowSec: 24 * 60 * 60 },
   ordersPerIp: { name: "orders-ip", max: 20, windowSec: 60 * 60 },
+  // Questions to the sales assistant; each can take a few model calls, so they also count towards aiPerDay.
+  assistantPerIp: { name: "assistant-ip", max: 20, windowSec: 60 * 60 },
 } satisfies Record<string, Limit>;
 
 export type LimitResult = { ok: true } | { ok: false; retryAfterSec: number };
