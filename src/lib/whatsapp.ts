@@ -1,114 +1,91 @@
 import "server-only";
 import { createHmac, timingSafeEqual } from "node:crypto";
 
-// Meta's WhatsApp Cloud API. Graph API versions stay supported for about two years.
-const GRAPH = `https://graph.facebook.com/${process.env.WHATSAPP_GRAPH_VERSION ?? "v23.0"}`;
+// WhatsApp through Twilio (the free Sandbox works without Meta business verification).
+// Docs: https://www.twilio.com/docs/whatsapp/api
 
 function config() {
-  const token = process.env.WHATSAPP_TOKEN;
-  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
-  if (!token || !phoneNumberId) {
-    throw new Error("WHATSAPP_TOKEN / WHATSAPP_PHONE_NUMBER_ID are not set.");
-  }
-  return { token, phoneNumberId };
+  const sid = process.env.TWILIO_ACCOUNT_SID;
+  const token = process.env.TWILIO_AUTH_TOKEN;
+  if (!sid || !token) throw new Error("TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN are not set.");
+  // The Sandbox number by default; a registered sender later.
+  const from = process.env.TWILIO_WHATSAPP_FROM ?? "whatsapp:+14155238886";
+  return { sid, token, from, basic: `Basic ${Buffer.from(`${sid}:${token}`).toString("base64")}` };
 }
 
-export const verifyToken = () => process.env.WHATSAPP_VERIFY_TOKEN;
-
-// Meta signs every webhook body with the app secret; anything without a valid signature is ignored.
-export function isSignedByMeta(rawBody: string, header: string | null) {
-  const secret = process.env.WHATSAPP_APP_SECRET;
-  if (!secret || !header?.startsWith("sha256=")) return false;
-  const expected = Buffer.from(createHmac("sha256", secret).update(rawBody).digest("hex"));
-  const given = Buffer.from(header.slice("sha256=".length));
+// Twilio signs each webhook: HMAC-SHA1 over the exact webhook URL plus the POST fields sorted by name.
+export function isSignedByTwilio(url: string, params: Record<string, string>, signature: string | null) {
+  const token = process.env.TWILIO_AUTH_TOKEN;
+  if (!token || !signature) return false;
+  const data = url + Object.keys(params).sort().map((k) => k + params[k]).join("");
+  const expected = Buffer.from(createHmac("sha1", token).update(data).digest("base64"));
+  const given = Buffer.from(signature);
   return expected.length === given.length && timingSafeEqual(expected, given);
 }
 
-async function graph(path: string, body: unknown) {
-  const { token } = config();
+// Numbers are stored and passed around as "+91…"; Twilio wants the "whatsapp:" prefix.
+const address = (number: string) => (number.startsWith("whatsapp:") ? number : `whatsapp:${number}`);
+
+async function send(to: string, fields: Record<string, string>, statusCallback?: string) {
+  const { sid, from, basic } = config();
+  const body = new URLSearchParams({ From: from, To: address(to), ...fields });
+  if (statusCallback) body.set("StatusCallback", statusCallback);
   // WHATSAPP_DRY_RUN logs outgoing messages instead of sending them, for local testing.
   if (process.env.WHATSAPP_DRY_RUN === "1") {
-    console.log("[whatsapp dry run]", path, JSON.stringify(body));
-    return {};
+    console.log("[whatsapp dry run]", JSON.stringify(Object.fromEntries(body)));
+    return;
   }
-  const res = await fetch(`${GRAPH}${path}`, {
+  const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    headers: { Authorization: basic },
+    body,
     cache: "no-store",
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(`WhatsApp API ${res.status}: ${JSON.stringify(data?.error ?? data)}`);
-  console.log(`whatsapp api: ${path.split("/").pop()} ok`);
-  return data;
+  if (!res.ok) throw new Error(`Twilio ${res.status}: ${data?.code ?? ""} ${data?.message ?? ""}`);
+  console.log(`whatsapp sent: ${data.status}`);
 }
 
-export function sendText(to: string, text: string) {
-  return graph(`/${config().phoneNumberId}/messages`, {
-    messaging_product: "whatsapp",
-    to,
-    type: "text",
-    text: { body: text.slice(0, 4096), preview_url: true },
-  });
+export type SendOptions = { statusCallback?: string };
+
+export function sendText(to: string, text: string, options: SendOptions = {}) {
+  return send(to, { Body: text.slice(0, 1600) }, options.statusCallback);
 }
 
-// `link` must be a public HTTPS URL; Meta fetches the image itself.
-export function sendImage(to: string, link: string, caption: string) {
-  return graph(`/${config().phoneNumberId}/messages`, {
-    messaging_product: "whatsapp",
-    to,
-    type: "image",
-    image: { link, caption },
-  });
+// One message with an image and a caption. `link` must be a public HTTPS URL Twilio can fetch.
+export function sendImage(to: string, link: string, caption: string, options: SendOptions = {}) {
+  return send(to, { Body: caption.slice(0, 1024), MediaUrl: link }, options.statusCallback);
 }
 
-// Blue ticks plus "typing…" while the AI works. Cosmetic, so failures are ignored.
-export async function markReadAndTyping(messageId: string) {
-  try {
-    await graph(`/${config().phoneNumberId}/messages`, {
-      messaging_product: "whatsapp",
-      status: "read",
-      message_id: messageId,
-      typing_indicator: { type: "text" },
-    });
-  } catch (err) {
-    console.warn("typing indicator failed:", err);
-  }
-}
-
-// Photos and voice notes arrive as media IDs: look up the temporary URL, then download it with the token.
-export async function downloadMedia(mediaId: string) {
-  const { token } = config();
-  const auth = { Authorization: `Bearer ${token}` };
-  const meta = await fetch(`${GRAPH}/${mediaId}`, { headers: auth, cache: "no-store" });
-  if (!meta.ok) throw new Error(`WhatsApp media lookup ${meta.status}`);
-  const { url, mime_type } = (await meta.json()) as { url: string; mime_type: string };
-  const file = await fetch(url, { headers: auth, cache: "no-store" });
-  if (!file.ok) throw new Error(`WhatsApp media download ${file.status}`);
-  const bytes = Buffer.from(await file.arrayBuffer());
+// Photos and voice notes arrive as Twilio media URLs, which need the account's credentials.
+export async function downloadMedia(url: string) {
+  const res = await fetch(url, { headers: { Authorization: config().basic }, redirect: "follow", cache: "no-store" });
+  if (!res.ok) throw new Error(`Twilio media download ${res.status}`);
+  const bytes = Buffer.from(await res.arrayBuffer());
   // Voice notes come as "audio/ogg; codecs=opus"; Gemini wants the bare type.
-  return { base64: bytes.toString("base64"), mimeType: mime_type.split(";")[0].trim(), size: bytes.length };
+  const mimeType = (res.headers.get("content-type") ?? "application/octet-stream").split(";")[0].trim();
+  return { base64: bytes.toString("base64"), mimeType, size: bytes.length };
 }
 
-// The parts of Meta's webhook payload the bot uses.
 export type IncomingMessage = {
   id: string;
-  from: string;
-  type: string;
-  text?: { body: string };
-  image?: { id: string; mime_type: string; caption?: string };
-  audio?: { id: string; mime_type: string };
+  from: string; // "+91…"
+  type: "text" | "image" | "audio" | "other";
+  text: string;
+  mediaUrl?: string;
 };
 
-// What Meta reports about messages we sent: sent, delivered, read or failed (with the reason).
-export type StatusUpdate = { status: string; errors?: { code: number; title?: string; error_data?: { details?: string } }[] };
-
-export function statusUpdates(payload: unknown): StatusUpdate[] {
-  const entries = (payload as { entry?: { changes?: { value?: { statuses?: StatusUpdate[] } }[] }[] })?.entry ?? [];
-  return entries.flatMap((e) => e.changes ?? []).flatMap((c) => c.value?.statuses ?? []);
-}
-
-export function incomingMessages(payload: unknown): IncomingMessage[] {
-  const entries = (payload as { entry?: { changes?: { value?: { messages?: IncomingMessage[] } }[] }[] })?.entry ?? [];
-  return entries.flatMap((e) => e.changes ?? []).flatMap((c) => c.value?.messages ?? []);
+// Twilio posts one message per request as form fields.
+export function incomingMessage(params: Record<string, string>): IncomingMessage | undefined {
+  if (!params.MessageSid || !params.From) return undefined;
+  const contentType = params.MediaContentType0 ?? "";
+  const hasMedia = Number(params.NumMedia ?? 0) > 0;
+  const type = !hasMedia ? "text" : contentType.startsWith("image/") ? "image" : contentType.startsWith("audio/") ? "audio" : "other";
+  return {
+    id: params.MessageSid,
+    from: params.From.replace(/^whatsapp:/, ""),
+    type,
+    text: (params.Body ?? "").trim(),
+    mediaUrl: hasMedia ? params.MediaUrl0 : undefined,
+  };
 }

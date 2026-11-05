@@ -36,15 +36,21 @@ export function getClient() {
 
 const isBusy = (err: unknown) => err instanceof ApiError && err.status === 503;
 
-// Free-tier models often answer 503 "high demand". Try the fallback model, then the main one once more.
+// A free-tier call can hang for minutes; give up on it and try the next model instead.
+const CALL_TIMEOUT_MS = 25_000;
+const isTimeout = (err: unknown) => err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError");
+
+// Free-tier models often answer 503 "high demand" or stall. Try the fallback model, then the main one once more.
 // Returns the model that answered so a multi-step conversation can stay on it.
 export async function generate(request: Omit<GenerateContentParameters, "model">, model = MODEL) {
   const order = model === FALLBACK_MODEL ? [FALLBACK_MODEL, MODEL] : [model, FALLBACK_MODEL, model];
   for (let i = 0; ; i++) {
     try {
-      return { response: await getClient().models.generateContent({ ...request, model: order[i] }), model: order[i] };
+      const config = { ...request.config, abortSignal: AbortSignal.timeout(CALL_TIMEOUT_MS) };
+      return { response: await getClient().models.generateContent({ ...request, config, model: order[i] }), model: order[i] };
     } catch (err) {
-      if (!isBusy(err) || i === order.length - 1) throw err;
+      if (isTimeout(err)) console.warn(`gemini: ${order[i]} timed out after ${CALL_TIMEOUT_MS / 1000}s`);
+      if (!(isBusy(err) || isTimeout(err)) || i === order.length - 1) throw err;
       if (order[i + 1] === order[i - 1]) await new Promise((r) => setTimeout(r, 1500));
     }
   }

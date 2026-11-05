@@ -1,43 +1,31 @@
 import { after } from "next/server";
 import { appUrl } from "@/lib/api";
 import { handleMessage } from "@/lib/bot";
-import { incomingMessages, isSignedByMeta, statusUpdates, verifyToken } from "@/lib/whatsapp";
+import { incomingMessage, isSignedByTwilio } from "@/lib/whatsapp";
 
-// Reading a bill can take 20 s or more on the free Gemini tier; that work runs after the response.
-export const maxDuration = 60;
+// A bill plus a question can need several Gemini calls (each capped at 25 s); that work runs after the response.
+export const maxDuration = 120;
 
-// Meta checks the webhook once when you connect it: echo the challenge if the verify token matches.
-export function GET(request: Request) {
-  const params = new URL(request.url).searchParams;
-  const token = verifyToken();
-  if (params.get("hub.mode") === "subscribe" && token && params.get("hub.verify_token") === token) {
-    return new Response(params.get("hub.challenge") ?? "", { status: 200 });
-  }
-  return new Response("Forbidden", { status: 403 });
-}
+const EMPTY_TWIML = '<?xml version="1.0" encoding="UTF-8"?><Response></Response>';
 
-// Incoming messages. Answer 200 straight away so Meta doesn't retry, then do the slow work.
+// Twilio posts each incoming WhatsApp message here as form fields. Answer at once with empty TwiML
+// (Twilio gives up after 15 s), then reply through the REST API once the AI is done.
 export async function POST(request: Request) {
-  const raw = await request.text();
-  if (!isSignedByMeta(raw, request.headers.get("x-hub-signature-256"))) {
-    console.warn(`whatsapp webhook: rejected, bad or missing signature (${raw.length} bytes)`);
-    return new Response("Invalid signature", { status: 401 });
+  const params = Object.fromEntries(
+    [...(await request.formData()).entries()].map(([k, v]) => [k, String(v)]),
+  );
+  // Twilio signs the public URL configured in its console, not the internal one Vercel sees.
+  const url = `${appUrl(request)}/api/whatsapp`;
+  if (!isSignedByTwilio(url, params, request.headers.get("x-twilio-signature"))) {
+    console.warn("whatsapp webhook: rejected, bad or missing signature");
+    return new Response("Invalid signature", { status: 403 });
   }
-  let payload: unknown;
-  try {
-    payload = JSON.parse(raw);
-  } catch {
-    return new Response("Bad JSON", { status: 400 });
+  const message = incomingMessage(params);
+  // Message type only, never content or phone numbers.
+  console.log(`whatsapp webhook: ${message ? message.type : "no"} message`);
+  if (message) {
+    const origin = appUrl(request);
+    after(() => handleMessage(message, origin));
   }
-  const origin = appUrl(request);
-  const messages = incomingMessages(payload);
-  // Message types only, never content or phone numbers.
-  console.log(`whatsapp webhook: ${messages.length} message(s) ${messages.map((m) => m.type).join(",")}`);
-  for (const st of statusUpdates(payload)) {
-    const errors = (st.errors ?? []).map((e) => `${e.code} ${e.title ?? ""} ${e.error_data?.details ?? ""}`.trim());
-    console.log(`whatsapp status: ${st.status}${errors.length ? ` · ${errors.join(" | ")}` : ""}`);
-  }
-  // Delivery and read receipts arrive here too; they carry no messages and need nothing.
-  if (messages.length) after(() => Promise.all(messages.map((m) => handleMessage(m, origin))));
-  return new Response("OK", { status: 200 });
+  return new Response(EMPTY_TWIML, { headers: { "Content-Type": "text/xml" } });
 }
