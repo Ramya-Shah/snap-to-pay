@@ -162,6 +162,16 @@ export async function listOrders(): Promise<OrderView[]> {
     .map((o) => toView(o, keyId, captured.get(o.id)));
 }
 
+// The newest bill the WhatsApp bot made for this shopkeeper in the last `withinSec` seconds.
+// Matches on the private notify_whatsapp note but never returns it.
+export async function latestBotOrder(whatsapp: string, withinSec: number): Promise<OrderView | undefined> {
+  const { keyId } = keys();
+  const since = Math.floor(Date.now() / 1000) - withinSec;
+  const orders = await call<{ items: RazorpayOrder[] }>(`/orders?count=20&from=${since}`);
+  const match = orders.items.find((o) => !Array.isArray(o.notes) && o.notes.notify_whatsapp === whatsapp);
+  return match && toView(match, keyId);
+}
+
 // Razorpay signs webhook bodies with the webhook secret set in its dashboard.
 export function isSignedByRazorpay(rawBody: string, signature: string | null) {
   const secret = process.env.RAZORPAY_WEBHOOK_SECRET;

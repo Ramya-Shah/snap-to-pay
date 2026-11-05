@@ -8,7 +8,7 @@ function config() {
   const sid = process.env.TWILIO_ACCOUNT_SID;
   const token = process.env.TWILIO_AUTH_TOKEN;
   if (!sid || !token) throw new Error("TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN are not set.");
-  // The Sandbox number by default; a registered sender later.
+  // The trial account's own WhatsApp number (TWILIO_WHATSAPP_FROM) or the shared Sandbox.
   const from = process.env.TWILIO_WHATSAPP_FROM ?? "whatsapp:+14155238886";
   return { sid, token, from, basic: `Basic ${Buffer.from(`${sid}:${token}`).toString("base64")}` };
 }
@@ -26,10 +26,11 @@ export function isSignedByTwilio(url: string, params: Record<string, string>, si
 // Numbers are stored and passed around as "+91…"; Twilio wants the "whatsapp:" prefix.
 const address = (number: string) => (number.startsWith("whatsapp:") ? number : `whatsapp:${number}`);
 
-async function send(to: string, fields: Record<string, string>, statusCallback?: string) {
+// Sending first (outside a webhook reply) needs an upgraded Twilio account: trial numbers only accept
+// approved templates there (error 21654). Used for the "paid" message after a Razorpay webhook.
+async function send(to: string, fields: Record<string, string>) {
   const { sid, from, basic } = config();
   const body = new URLSearchParams({ From: from, To: address(to), ...fields });
-  if (statusCallback) body.set("StatusCallback", statusCallback);
   // WHATSAPP_DRY_RUN logs outgoing messages instead of sending them, for local testing.
   if (process.env.WHATSAPP_DRY_RUN === "1") {
     console.log("[whatsapp dry run]", JSON.stringify(Object.fromEntries(body)));
@@ -46,15 +47,8 @@ async function send(to: string, fields: Record<string, string>, statusCallback?:
   console.log(`whatsapp sent: ${data.status}`);
 }
 
-export type SendOptions = { statusCallback?: string };
-
-export function sendText(to: string, text: string, options: SendOptions = {}) {
-  return send(to, { Body: text.slice(0, 1600) }, options.statusCallback);
-}
-
-// One message with an image and a caption. `link` must be a public HTTPS URL Twilio can fetch.
-export function sendImage(to: string, link: string, caption: string, options: SendOptions = {}) {
-  return send(to, { Body: caption.slice(0, 1024), MediaUrl: link }, options.statusCallback);
+export function sendText(to: string, text: string) {
+  return send(to, { Body: text.slice(0, 1600) });
 }
 
 // Photos and voice notes arrive as Twilio media URLs, which need the account's credentials.
