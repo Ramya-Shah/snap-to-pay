@@ -100,6 +100,14 @@ export type IncomingMessage = {
   audio?: { id: string; mime_type: string };
 };
 
+// What Meta reports about messages we sent: sent, delivered, read or failed (with the reason).
+export type StatusUpdate = { status: string; errors?: { code: number; title?: string; error_data?: { details?: string } }[] };
+
+export function statusUpdates(payload: unknown): StatusUpdate[] {
+  const entries = (payload as { entry?: { changes?: { value?: { statuses?: StatusUpdate[] } }[] }[] })?.entry ?? [];
+  return entries.flatMap((e) => e.changes ?? []).flatMap((c) => c.value?.statuses ?? []);
+}
+
 export function incomingMessages(payload: unknown): IncomingMessage[] {
   const entries = (payload as { entry?: { changes?: { value?: { messages?: IncomingMessage[] } }[] }[] })?.entry ?? [];
   return entries.flatMap((e) => e.changes ?? []).flatMap((c) => c.value?.messages ?? []);

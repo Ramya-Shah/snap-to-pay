@@ -1,7 +1,7 @@
 import { after } from "next/server";
 import { appUrl } from "@/lib/api";
 import { handleMessage } from "@/lib/bot";
-import { incomingMessages, isSignedByMeta, verifyToken } from "@/lib/whatsapp";
+import { incomingMessages, isSignedByMeta, statusUpdates, verifyToken } from "@/lib/whatsapp";
 
 // Reading a bill can take 20 s or more on the free Gemini tier; that work runs after the response.
 export const maxDuration = 60;
@@ -33,6 +33,10 @@ export async function POST(request: Request) {
   const messages = incomingMessages(payload);
   // Message types only, never content or phone numbers.
   console.log(`whatsapp webhook: ${messages.length} message(s) ${messages.map((m) => m.type).join(",")}`);
+  for (const st of statusUpdates(payload)) {
+    const errors = (st.errors ?? []).map((e) => `${e.code} ${e.title ?? ""} ${e.error_data?.details ?? ""}`.trim());
+    console.log(`whatsapp status: ${st.status}${errors.length ? ` · ${errors.join(" | ")}` : ""}`);
+  }
   // Delivery and read receipts arrive here too; they carry no messages and need nothing.
   if (messages.length) after(() => Promise.all(messages.map((m) => handleMessage(m, origin))));
   return new Response("OK", { status: 200 });
