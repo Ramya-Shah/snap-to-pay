@@ -52,6 +52,7 @@ function billMessage(bill: ParsedBill, payUrl?: string) {
 export async function handleMessage(message: IncomingMessage, origin: string) {
   if (!firstTime(message.id)) return;
   const to = message.from;
+  console.log(`whatsapp bot: handling ${message.type} message`);
   try {
     const text = message.text?.body?.trim() ?? message.image?.caption?.trim() ?? "";
     if (message.type === "text" && GREETING.test(text)) return await sendText(to, HELP);

@@ -20,6 +20,7 @@ export function GET(request: Request) {
 export async function POST(request: Request) {
   const raw = await request.text();
   if (!isSignedByMeta(raw, request.headers.get("x-hub-signature-256"))) {
+    console.warn(`whatsapp webhook: rejected, bad or missing signature (${raw.length} bytes)`);
     return new Response("Invalid signature", { status: 401 });
   }
   let payload: unknown;
@@ -30,6 +31,8 @@ export async function POST(request: Request) {
   }
   const origin = appUrl(request);
   const messages = incomingMessages(payload);
+  // Message types only, never content or phone numbers.
+  console.log(`whatsapp webhook: ${messages.length} message(s) ${messages.map((m) => m.type).join(",")}`);
   // Delivery and read receipts arrive here too; they carry no messages and need nothing.
   if (messages.length) after(() => Promise.all(messages.map((m) => handleMessage(m, origin))));
   return new Response("OK", { status: 200 });

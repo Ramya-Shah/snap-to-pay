@@ -39,6 +39,7 @@ async function graph(path: string, body: unknown) {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(`WhatsApp API ${res.status}: ${JSON.stringify(data?.error ?? data)}`);
+  console.log(`whatsapp api: ${path.split("/").pop()} ok`);
   return data;
 }
 
