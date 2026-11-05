@@ -7,6 +7,9 @@ export const tooMany = (retryAfterSec: number, error: string) =>
 
 export const isOrderId = (id: string) => /^order_[A-Za-z0-9]{6,30}$/.test(id);
 
+// Links sent outside the browser (WhatsApp) need the public address, not whichever deployment URL served the request.
+export const appUrl = (request: Request) => process.env.APP_URL ?? new URL(request.url).origin;
+
 export function razorpayFailure(err: unknown, action: string) {
   console.error(`${action} failed:`, err);
   if (err instanceof RazorpayError && err.status === 400) return fail(400, err.message);

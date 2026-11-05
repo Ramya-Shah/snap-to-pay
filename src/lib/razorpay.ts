@@ -88,28 +88,30 @@ export type OrderView = {
 const clip = (s: string) => (s.length > MAX_NOTE ? `${s.slice(0, MAX_NOTE - 1)}…` : s);
 
 // The bill travels with the order as notes, so the pay page needs no database.
-function billNotes(bill: ParsedBill): Record<string, string> {
+// `notify` is the shopkeeper's WhatsApp number for bills made through the bot; it takes one line slot
+// and is never shown on public pages (they only read `merchant` and `line…` notes).
+function billNotes(bill: ParsedBill, notify?: string): Record<string, string> {
+  const maxLines = notify ? MAX_LINE_NOTES - 1 : MAX_LINE_NOTES;
   const lines = [
     ...bill.items.map((i) => `${i.name} × ${i.quantity}${i.unit ? ` ${i.unit}` : ""} — ${rupees(i.amount)}`),
     ...bill.charges.map((c) => `${c.label} — ${rupees(c.amount)}`),
   ];
   const kept =
-    lines.length > MAX_LINE_NOTES
-      ? [...lines.slice(0, MAX_LINE_NOTES - 1), `+ ${lines.length - MAX_LINE_NOTES + 1} more items`]
-      : lines;
+    lines.length > maxLines ? [...lines.slice(0, maxLines - 1), `+ ${lines.length - maxLines + 1} more items`] : lines;
   const notes: Record<string, string> = { merchant: clip(bill.merchantName ?? "Snap-to-Pay") };
+  if (notify) notes.notify_whatsapp = notify;
   kept.forEach((line, i) => (notes[`line${String(i + 1).padStart(2, "0")}`] = clip(line)));
   return notes;
 }
 
-export async function createOrder(bill: ParsedBill) {
+export async function createOrder(bill: ParsedBill, options: { notifyWhatsapp?: string } = {}) {
   const order = await call<RazorpayOrder>("/orders", {
     method: "POST",
     body: {
       amount: Math.round(bill.computedTotal * 100),
       currency: "INR",
       receipt: `${RECEIPT_PREFIX}${Date.now().toString(36)}`,
-      notes: billNotes(bill),
+      notes: billNotes(bill, options.notifyWhatsapp),
     },
   });
   return order.id;
@@ -158,6 +160,15 @@ export async function listOrders(): Promise<OrderView[]> {
   return orders.items
     .filter((o) => o.receipt?.startsWith(RECEIPT_PREFIX))
     .map((o) => toView(o, keyId, captured.get(o.id)));
+}
+
+// Razorpay signs webhook bodies with the webhook secret set in its dashboard.
+export function isSignedByRazorpay(rawBody: string, signature: string | null) {
+  const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
+  if (!secret || !signature) return false;
+  const expected = Buffer.from(createHmac("sha256", secret).update(rawBody).digest("hex"));
+  const given = Buffer.from(signature);
+  return expected.length === given.length && timingSafeEqual(expected, given);
 }
 
 // Checkout's success callback is only trusted once this signature matches.
