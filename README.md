@@ -24,6 +24,27 @@ The same works on WhatsApp itself, and an AI assistant answers questions about t
   code and pay link back in one message; ask sales questions the same way.
 - **Sample bills** show saved Gemini answers instantly, with no AI quota used.
 
+## See it on WhatsApp
+
+Real messages to the bot, in Razorpay test mode. The empty middle of each chat is cropped out.
+
+**A typed order** becomes one reply with the QR code, the bill and a pay link. The total is added
+up by the server, and the "500g" stays in the item name instead of becoming a quantity.
+
+<img src="docs/whatsapp/typed-order.png" alt="WhatsApp: a typed order gets a QR code, an itemized bill totalling ₹449 and a pay link" width="620">
+
+**A missing price is flagged**, not guessed: "thoda dhaniya" has no price, so the bot says so.
+
+<img src="docs/whatsapp/missing-price.png" alt="WhatsApp: coriander is flagged with No price given, and the bill totals ₹170" width="470">
+
+**One price for two items** stays one line: "dono kundru aur bhindi 90" isn't split or invented.
+
+<img src="docs/whatsapp/combined-price.png" alt="WhatsApp: ivy gourd and ladyfinger appear as one ₹90 line, and the bill totals ₹130" width="450">
+
+**Sales questions** are answered from live Razorpay data, in the language they're asked in.
+
+<img src="docs/whatsapp/sales-questions.png" alt="WhatsApp: a Hinglish question gets a Hinglish answer, and an English question lists the 5 latest of 38 unpaid bills" width="760">
+
 ## Try the WhatsApp bot
 
 The bot runs on Twilio's free WhatsApp Sandbox.
