@@ -6,6 +6,7 @@ import { SAMPLES, type Sample } from "@/lib/samples";
 import { BillEditor } from "./bill-editor";
 import { Logo, PaymentsLink, TestModeBadge } from "./ui/brand";
 import { HowItWorks } from "./ui/how-it-works";
+import { WhatsAppDemo } from "./ui/whatsapp-demo";
 import { Icon, type IconName } from "./ui/icons";
 
 type Mode = Sample["kind"];
@@ -393,6 +394,8 @@ export default function Home() {
           </div>
         </section>
       </main>
+
+      <WhatsAppDemo />
 
       <HowItWorks />
 
